@@ -1,0 +1,199 @@
+---
+title: "Analysis Code"
+format: 
+  html:
+    fig-height: 5
+    fig-width: 6
+    dpi: 500
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+source(here::here("my_theme.R"))
+```
+
+
+## Data
+
+```{r read in + clean data}
+library(invburreg)
+data("wars")
+```
+
+
+## Figures
+
+```{r figure 1}
+#| fig-height: 5
+#| fig-width: 6
+ggplot(wars) +
+  aes(x = year, y = fat) +
+  geom_point() +
+  scale_y_continuous(
+    labels = \(x) paste0(x/1e06, " mil.")
+  ) +
+  labs(
+    title = "How bad is the Russia-Ukraine War?",
+    subtitle = "Battle deaths in millions for all wars 1816-2007",
+    caption = logo
+  ) +
+  geom_text(
+    data = . %>%
+      filter(fat > 5e06),
+    aes(label = c("WWI", "WW2")),
+    hjust = -.5,
+    family = "mono"
+  ) +
+  geomtextpath::geom_texthline(
+    yintercept = 150000,
+    color = "orange3",
+    label = "~ 150,000 Russian and Ukrianian battle\ndeaths so far",
+    linewidth = 1,
+    hjust = 0.11,
+    vjust = -.5,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  my_theme()
+ggsave(
+  here::here(
+    "01_russia_ukraine_war_size",
+    "_figs",
+    "fig1.png"
+  ),
+  height = 4,
+  width = 6,
+  dpi = 500
+)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+px <- function(x) {
+  x <- rank(-x)
+  x / max(x,na.rm = T)
+}
+library(poweRlaw)
+m <- conpl$new(wars$fat)
+m$setXmin(estimate_xmin(m, xmax = 1e09))
+pp <- plot(m)
+pl <- lines(m)
+ggplot(wars) +
+  aes(x = fat, y = px(fat)) +
+  geom_point() +
+  geom_line(
+    aes(x = pl$x[-c(6:10)], y = pl$y[-c(6:10)]),
+    color = "orange3",
+    linewidth = 1
+  ) +
+  geom_point(
+    data = pl |>
+      filter(x >= 150000) %>%
+      .[1, ],
+    aes(x = x, y = y),
+    fill = "orange3",
+    color = "white",
+    pch = 21,
+    size = 3
+  ) +
+  ggrepel::geom_text_repel(
+    data = pl |>
+      filter(x >= 150000) %>%
+      .[1, ],
+    aes(x = x, y = y, label = "Where the Russia-Ukraine\nWar would fall"),
+    color = "orange3",
+    nudge_x = 1.5,
+    nudge_y = .5,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  scale_x_log10(
+    breaks = c(.01, .1, 1, 10) * 1e06,
+    labels = \(x) paste0(x/1e06, " mil")
+  ) +
+  scale_y_log10(
+    labels = scales::percent
+  ) +
+  annotate(
+    "text",
+    x = .01 * 1e6,
+    y = .09,
+    label = "Characteristic\nlinear power-law\nslope",
+    color = "orange3",
+    family = "mono",
+    fontface = "bold"
+  ) +
+  labs(
+    title = "The power-law behavior of war",
+    subtitle = "% of wars bigger than a given war\nshown by observed war size (log-10 scale)",
+    caption = logo
+  ) +
+  my_theme()
+ggsave(
+  here::here(
+    "01_russia_ukraine_war_size",
+    "_figs",
+    "fig2.png"
+  ),
+  height = 4,
+  width = 6,
+  dpi = 500
+)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+x <- c(150000, 500000, 1000000, 2000000)
+p <- pplcon(
+  q = x,
+  xmin = m$xmin,
+  alpha = m$pars,
+  lower.tail = F
+) * (pl$y[1])
+
+
+ggplot() +
+  aes(x = 1:4, y = p) +
+  geom_col() +
+  geom_text(
+    aes(label = scales::percent(round(p, 2))),
+    vjust = 1.5,
+    family = "mono",
+    color = "white",
+    fontface = "bold"
+  ) +
+  scale_y_continuous(
+    breaks = NULL
+  ) +
+  scale_x_continuous(
+    breaks = 1:4,
+    labels = c("150,000\ntroops",
+               "500,000\ntroops",
+               "1 million\ntroops",
+               "2 million\ntroops")
+  ) +
+  labs(
+    title = "A million deaths isn't a big leap",
+    subtitle = "% likelihood of a war that kills...",
+    caption = logo
+  ) +
+  my_theme() +
+  theme(
+    panel.grid.major.x = element_blank()
+  )
+ggsave(
+  here::here(
+    "01_russia_ukraine_war_size",
+    "_figs",
+    "fig3.png"
+  ),
+  height = 4,
+  width = 6,
+  dpi = 500
+)
+```
+
