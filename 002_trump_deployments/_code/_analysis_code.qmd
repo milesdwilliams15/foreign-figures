@@ -1,0 +1,299 @@
+---
+title: "Untitled"
+format: 
+  html:
+    fig-height: 4
+    fig-width: 6
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+source(here::here("my_theme.R"))
+saveit <- function(ht = 4, wd = 6, num = 1) {
+  ggsave(
+  here::here(
+    "002_trump_deployments",
+    "_figs",
+    paste0("fig", num, ".png")
+  ),
+  height = ht,
+  width = wd,
+  dpi = 500
+)
+}
+```
+
+## Data
+
+```{r troops data}
+library(troopdata)
+troops <- get_troopdata(
+  startyear = 1989,
+  endyear = 2024
+)
+build <- get_builddata(
+  startyear = 2008,
+  endyear = 2019
+)
+acd <- read_csv(
+  here::here(
+    "002_trump_deployments",
+    "_data",
+    "UcdpPrioConflict_v24_1.csv"
+  )
+)
+```
+
+
+## Figures
+
+```{r fig1}
+#| fig-height: 4
+#| fig-width: 6
+
+troops |>
+  filter(countryname != "United States") |>
+  group_by(year) |>
+  summarize(
+    troops = sum(troops_ad)
+  ) |>
+  bind_rows(
+    tibble(year = 2025, troops = NA)
+  ) |>
+  ggplot() +
+  aes(x = year, y = troops) +
+  geom_ribbon(
+    data = . %>% filter(year %in% 1989:1993),
+    aes(ymin = -Inf, ymax = Inf),
+    alpha = 0.4
+  ) +
+  geom_ribbon(
+    data = . %>% filter(year %in% 2001:2009),
+    aes(ymin = -Inf, ymax = Inf),
+    alpha = 0.4
+  ) +
+  geom_ribbon(
+    data = . %>% filter(year %in% 2017:2021),
+    aes(ymin = -Inf, ymax = Inf),
+    alpha = 0.4
+  ) +
+  geom_line(
+    size = 1.25,
+    color = "white"
+  ) +
+  geom_line(
+    size = .75,
+    color = "orange3"
+  ) +
+  annotate(
+    "text",
+    x = c(1990, 1994, 2002, 2010, 2018, 2022) - .5,
+    y = 5e05,
+    label = c(
+      "Bush I",
+      "Clinton",
+      "Bush II",
+      "Obama",
+      "Trump",
+      "Biden"
+    ),
+    color = c("white", "black", "white",
+              "black", "white", "black"),
+    hjust = 0,
+    family = "mono",
+    fontface = "bold",
+    angle = 90
+  ) +
+  scale_x_continuous(
+    n.breaks = 10
+  ) +
+  scale_y_continuous(
+    labels = scales::comma
+  ) +
+  labs(
+    title = "Deployments declined before Trump",
+    subtitle = 
+      "Total U.S. troops deployed overseas, 1989-2024",
+    caption = logo
+  ) +
+  my_theme() +
+  theme(
+    panel.grid.major.x = element_blank(),
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1
+    )
+  )
+saveit(num = 1)
+```
+
+```{r fig2}
+troops |>
+  filter(countryname != "United States") |>
+  group_by(year) |>
+  summarize(
+    n = sum(troops_ad > 0)
+  ) |>
+  ggplot() +
+  aes(x = year, y = n) +
+  geom_ribbon(
+    data = . %>% filter(year %in% 1989:1993),
+    aes(ymin = -Inf, ymax = Inf),
+    alpha = 0.4
+  ) +
+  geom_ribbon(
+    data = . %>% filter(year %in% 2001:2009),
+    aes(ymin = -Inf, ymax = Inf),
+    alpha = 0.4
+  ) +
+  geom_ribbon(
+    data = . %>% filter(year %in% 2017:2021),
+    aes(ymin = -Inf, ymax = Inf),
+    alpha = 0.4
+  ) +
+  geom_line(
+    size = 1.25,
+    color = "white"
+  ) +
+  geom_line(
+    size = .75,
+    color = "orange3"
+  ) +
+  annotate(
+    "text",
+    x = c(1990, 1994, 2002, 2010, 2018, 2022) - .5,
+    y = c(rep(162, len = 4), c(150, 150)),
+    label = c(
+      "Bush I",
+      "Clinton",
+      "Bush II",
+      "Obama",
+      "Trump",
+      "Biden"
+    ),
+    color = c("white", "black", "white",
+              "black", "white", "black"),
+    hjust = 0,
+    family = "mono",
+    fontface = "bold",
+    angle = 90
+  ) +
+  scale_x_continuous(
+    n.breaks = 10
+  ) +
+  scale_y_continuous(
+    labels = scales::comma
+  ) +
+  labs(
+    title = "U.S. troops are in more places",
+    subtitle = 
+      "# of countries with U.S. deployments, 1989-2024",
+    caption = logo
+  ) +
+  my_theme() +
+  theme(
+    panel.grid.major.x = element_blank(),
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1
+    )
+  )
+saveit(num = 2)
+```
+
+```{r fig3}
+build |>
+  filter(countryname != "United States") |>
+  group_by(year) |>
+  summarize(
+    cost = sum(spend_construction) * 1e03
+  ) |>
+  ggplot() +
+  aes(x = year, y = cost) +
+  geom_line(
+    size = 1,
+    color = "orange3"
+  ) +
+  labs(
+    title = "U.S. spending is going down",
+    subtitle = 
+      "Spending on military construction & housing,\n2008-2019",
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = seq(2008, 2018, by = 2)
+  ) +
+  scale_y_continuous(
+    labels = ~ paste0(
+      "$", .x/1e09, " bil"
+    )
+  ) +
+  my_theme()
+saveit(num = 3)
+```
+
+
+```{r fig4}
+acd |>
+  filter(
+    str_detect(side_a, "United States") |
+      str_detect(side_a_2nd, "United States") |
+      str_detect(side_b, "United States") |
+      str_detect(side_b_2nd, "United States")
+  ) |>
+  group_by(year) |>
+  summarize(
+    n = n()
+  ) |>
+  ggplot() +
+  aes(x = year, y = n) +
+  geom_ribbon(
+    data = . %>% filter(year %in% 2017:2021),
+    aes(ymin = -Inf, ymax = Inf),
+    fill = "navy",
+    alpha = 0.4
+  ) +
+  # geom_pointrange(
+  #   aes(ymin = 0, ymax = n),
+  #   size = .3,
+  #   linewidth = 1,
+  #   color = "white"
+  # ) +
+  # geom_pointrange(
+  #   aes(ymin = 0, ymax = n),
+  #   size = .2,
+  #   color = "orange3"
+  # ) +
+  stat_smooth(
+    method = "gam",
+    method.args = list(family = quasipoisson),
+    se = F,
+    color = "navy"
+  ) +
+  geom_point(
+    fill = "orange3",
+    pch = 21,
+    color = "white"
+  ) +
+  annotate(
+    "text",
+    x = 2018,
+    y = 3,
+    label = "Trump",
+    color = "white",
+    family = "mono",
+    fontface = "bold",
+    angle = 90
+  ) +
+  labs(
+    title = "Trump's 1st term was historically\ninterventionist",
+    subtitle = 
+      "# of armed conflicts involving\nthe U.S., 1950-2023",
+    caption = logo
+  ) +
+  my_theme() 
+saveit(num = 4)
+```
+
