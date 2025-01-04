@@ -1,0 +1,226 @@
+---
+title: "Tariffs and Growth"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+source(here::here("my_theme.R"))
+saveit <- function(ht = 4, wd = 6, num = 1) {
+  ggsave(
+    here::here(
+      "003_tariffs_and_growth",
+      "_figs",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+## Data
+
+```{r}
+library(wbstats)
+inds <- c(
+  tariff_rate = "TM.TAX.MRCH.WM.AR.ZS", 
+  gdp_growth = "NY.GDP.MKTP.KD.ZG"
+)
+dt <- wb_data(
+  indicator = inds,
+  start_date = 1988,
+  end_date = 2023
+) 
+
+## filter to just U.S.
+dt <- dt |> filter(country == "United States")
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  ggplot() +
+  aes(
+    x = date,
+    y = tariff_rate
+  ) +
+  geom_point(
+    color = "orange3",
+    fill = "white",
+    pch = 21,
+    size = 3
+  ) +
+  ggrepel::geom_text_repel(
+    data = . %>% filter(date == "2019"),
+    aes(
+      label = "US-China\nTrade War"
+    ),
+    nudge_x = -5,
+    nudge_y = -2,
+    color = "orange3",
+    family = "mono",
+    fontface = "bold"
+  ) +
+  scale_x_continuous(
+    breaks = seq(1990, 2020, by = 5)
+  ) +
+  scale_y_continuous(
+    labels = ~ paste0(.x, "%")
+  ) +
+  labs(
+    title = 
+      "U.S. tariff rate trending down",
+    subtitle = 
+      "Weighted mean tarrif rate (%) by year, 1988-2022",
+    caption = logo
+  ) +
+  my_theme()
+saveit(num = 1)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  ggplot() +
+  aes(
+    x = date,
+    y = gdp_growth
+  ) +
+  geom_point(
+    color = "orange3",
+    fill = "white",
+    pch = 21,
+    size = 3
+  ) +
+  scale_x_continuous(
+    breaks = seq(1990, 2020, by = 5)
+  ) +
+  scale_y_continuous(
+    breaks = seq(-10, 10, by = 5),
+    labels = ~ paste0(.x, "%")
+  ) +
+  labs(
+    title = 
+      "Economic growth consistently positive",
+    subtitle = 
+      "U.S. GDP growth (%) by year, 1988-2023",
+    caption = logo
+  ) +
+  my_theme() +
+  ggrepel::geom_text_repel(
+    data = . %>%
+      filter(date %in% c(2009, 2020)),
+    aes(label = c("Global\nRecession", "COVID-19")),
+    nudge_x = -6,
+    nudge_y = c(-1, 1),
+    color = "orange3",
+    family = "mono",
+    fontface = "bold"
+  )
+saveit(num = 2)
+```
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+dt |>
+  filter(country == "United States") |>
+  mutate(
+    tariff_lag = lag(
+      tariff_rate,
+      n = 1,
+      order_by = date
+    ),
+    tariff_delta = tariff_rate - tariff_lag
+  ) -> dt
+
+dt |>
+  mutate(
+    tariff_delta = frcode(
+      tariff_delta < 0 ~ 
+        "tariffs\ndecrease",
+      tariff_delta == 0 ~ 
+        "tariffs\nstay the same",
+      tariff_delta > 0 ~ 
+        "tariffs\nincrease"
+    )
+  ) |>
+  drop_na(tariff_delta) |>
+  ggplot() +
+  aes(x = tariff_delta, y = gdp_growth) +
+  geom_point(
+    color = "gray70"
+  ) +
+  geom_point(
+    data = . %>% filter(date == 2019),
+    color = "orange3",
+    size = 2,
+    pch = 21,
+    fill = "white"
+  ) +
+  ggrepel::geom_text_repel(
+    data = tibble(
+      x = 1,
+      y = dt |>
+        filter(tariff_delta < 0) |>
+        pull(gdp_growth) |>
+        mean(na.rm = T)
+    ),
+    aes(x, y, label = "Mean with\n95% CIs"),
+    nudge_x = .5,
+    nudge_y = 1,
+    color = "navy",
+    family = "mono",
+    fontface = "bold"
+  ) +
+  ggrepel::geom_text_repel(
+    data = . %>% filter(date == "2019"),
+    aes(
+      label = "US-China\nTrade War"
+    ),
+    nudge_x = -.5,
+    nudge_y = -1.5,
+    color = "orange3",
+    family = "mono",
+    fontface = "bold"
+  ) +
+  stat_summary(
+    fun.data = mean_cl_boot,
+    color = "navy",
+    linewidth = 1,
+    pch = 21,
+    fill = "white"
+  ) +
+  scale_y_continuous(
+    labels = ~ paste0(.x, "%")
+  ) +
+  # scale_x_discrete(
+  #   position = "top"
+  # ) +
+  labs(
+    title = "U.S. tariffs up, GDP growth down",
+    subtitle = 
+      "Average U.S. GDP growth (%) in years where\n",
+    caption = logo
+  ) +
+  my_theme() +
+  theme(
+    panel.grid.major.y = element_blank()
+  ) +
+  coord_flip()
+saveit(num = 3)
+```
+
