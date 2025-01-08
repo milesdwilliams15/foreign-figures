@@ -1,0 +1,219 @@
+---
+title: "Order and Conflict"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "black",
+    "navy"
+  ),
+  binary = c("orange3", "navy")
+)
+source(here::here("my_theme.R"))
+saveit <- function(ht = 4, wd = 6, num = 1) {
+  ggsave(
+    here::here(
+      "004_int_ord",
+      "_figs",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+## Data
+
+```{r}
+dt <- read_rds(
+  here::here(
+    "004_int_ord",
+    "_data",
+    "prep_data.rds"
+  )
+)
+
+dt |>
+  mutate(
+    status = frcode(
+      order == 1 ~ "Same",
+      beyondorders == 1 |
+        outsideorder == 1 ~ "Outside & Beyond",
+      betweenorders == 1 ~ "Competing"
+    )
+  ) -> dt
+```
+
+## Figures
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  group_by(year) |>
+  mean_ci(order) |>
+  drop_na() |>
+  ggplot() +
+  aes(x = year, y = mean) +
+  geom_textvline(
+    xintercept = (1914 + 1919)/2,
+    label = "World War 1",
+    linewidth = 6,
+    family = "mono",
+    fontface = "bold",
+    color = "orange3"
+  ) +
+  geom_textvline(
+    xintercept = (1939 + 1945)/2,
+    label = "World War 2",
+    linewidth = 6,
+    family = "mono",
+    fontface = "bold",
+    color = "orange3"
+  ) +
+  geom_textvline(
+    xintercept = 1991,
+    label = "Cold War Ends",
+    linewidth = 6,
+    family = "mono",
+    fontface = "bold",
+    color = "orange3"
+  ) +
+  geom_line(
+    size = 1,
+    color = "navy"
+  ) +
+  scale_x_continuous(
+    breaks = seq(1820, 2010, by = 20)
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  ) +
+  my_theme() +
+  labs(
+    title = 
+      "The Rise & Fall of Order Membership",
+    subtitle = 
+      "% of country pairs that are jointly members\nof the same international order, 1816-2014",
+    caption = logo
+  )
+saveit(num = 1)
+```
+
+```{r}
+#| fig-width: 6
+#| fig-height: 4
+dt |>
+  mutate(
+    order = ifelse(
+      order == 1, "Inside Order",
+      "Between &\nOutside Orders"
+    )
+  ) |>
+  group_by(order, year) |>
+  summarize(
+    mean = sum(mie_count, na.rm = T) /
+      sum(pol_rel)
+  ) |>
+  filter(mean > 0) |>
+  ggplot() +
+  aes(x = year, y = mean) +
+  geom_point(
+    aes(color = order),
+    alpha = 0.4
+  ) +
+  stat_smooth(
+    aes(color = order),
+    se = F,
+    method = "gam"
+  ) +
+  scale_y_log10() +
+  ggpal("binary") +
+  my_theme() +
+  labs(
+    title = 
+      "Orders are more peaceful",
+    subtitle = 
+      "Conflict rate adjusted for opportunity (log-10 scale)\nby order status from 1816-2014",
+    caption = logo,
+    color = NULL
+  )
+saveit(num = 2)
+```
+
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+dt |>
+  mutate(
+    ord_cat = case_when(
+      order == 1 ~ "Same Order",
+      betweenorders == 1 ~ "Between Orders",
+      TRUE ~ "Outside Order"
+    )
+  ) |>
+  mutate(
+    period = frcode(
+      year < 1914 ~ "19th Century",
+      year %in% 1919:1938 ~ "Interwar Period",
+      year %in% 1946:1991 ~ "Cold War",
+      year > 1991 ~ "Post-Cold War"
+    )
+  ) |>
+  drop_na() |>
+  filter(period == "Cold War") -> ndt
+ggplot(ndt) +
+  aes(
+    x = ord_cat,
+    y = mie_count / pol_rel,
+    color = ord_cat
+  ) +
+  ggrepel::geom_text_repel(
+    data = ndt %>%
+      filter(ord_cat == "Between Orders") %>%
+      group_by(ord_cat) %>%
+      summarize(
+        y = mean(mie_count / pol_rel)
+      ),
+    aes(y = y, 
+        label = "Mean with 95%\nconfidence interval"),
+    nudge_x = 1,
+    nudge_y = -10,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  stat_summary(
+    fun.data = mean_cl_normal,
+    pch = 21,
+    fill = "white"
+  ) +
+  my_theme() +
+  theme(
+    legend.position = "",
+    panel.grid.major.x = element_blank()
+  ) +
+  labs(
+    title = 
+      "Int'l Order Is a Double-edged Sword",
+    subtitle = 
+      "Cold War conflict rates between pairs of countries\nadjusting for opportunities to fight",
+    caption = logo
+  ) +
+  ggpal()
+saveit(num = 3)
+```
+
