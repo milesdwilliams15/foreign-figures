@@ -1,0 +1,148 @@
+---
+title: "Doodles"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "black",
+    "navy"
+  ),
+  binary = c("orange3", "navy")
+)
+source(here::here("my_theme.R"))
+saveit <- function(file, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "_doodle_figs",
+      paste0(file, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+## Int'l Conflict Rate over Time
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+## data:
+ucdp <- read_csv(
+  here::here(
+    "_data", "UcdpPrioConflict_v24_1.csv"
+  )
+)
+
+ucdp |>
+  group_by(year) |>
+  count(type_of_conflict) |>
+  mutate(
+    type_of_conflict = 
+      frcode(
+        type_of_conflict == 1 ~ "Extrasystemic",
+        type_of_conflict == 2 ~ "Interstate",
+        type_of_conflict == 3 ~ "Intrastate",
+        type_of_conflict == 4 ~ "Internationalized\nIntrastate"
+      )
+  ) |>
+  ggplot() +
+  aes(x = year, y = n) +
+  geom_line(
+    aes(color = type_of_conflict)
+  ) +
+  labs(
+    title = 
+      "Conflict frequencies by year from UCDP",
+    subtitle = 
+      "Count of conflicts that kill at least 25 per year\nby type, 1946-2022",
+    color = NULL,
+    caption = logo
+  ) +
+  my_theme() 
+saveit("ucdp_conf_types")
+```
+
+
+
+## U.S. Trade Centrality
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+## trade data
+library(peacesciencer)
+create_stateyears(
+  subset_years = 1920:2014
+) |>
+  add_cow_trade() -> dt
+
+## Note: flow1 = imports to 1 and flow2 is exports to 2
+
+dt |>
+  group_by(year) |>
+  summarize(
+    total = sum(exports, na.rm = T),
+    us_share = sum(
+      exports[ccode == 2], na.rm = T
+    ) / total,
+    ch_share = sum(
+      exports[ccode == 710]
+    ) / total
+  ) |>
+  ggplot() +
+  aes(x = year) +
+  geom_textsmooth(
+    aes(y = us_share),
+    label = "United States",
+    method = "gam",
+    se = F,
+    color = "navy",
+    hjust = .7,
+    linewidth = 1
+  ) +
+  geom_textsmooth(
+    aes(y = ch_share),
+    label = "China",
+    method = "gam",
+    se = F,
+    color = "orange3",
+    hjust = .7,
+    linewidth = 1
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  ) +
+  scale_x_continuous(
+    breaks = seq(1920, 2010, by = 10)
+  ) +
+  my_theme() +
+  labs(
+    title = 
+      "China leads U.S. in global exports",
+    subtitle = 
+      "(%) share of global exports, 1920-2014",
+    caption = logo
+  ) +
+  annotate(
+    "text",
+    x = 1990,
+    y = .25,
+    label = "Smoothed average trends\nestimated with a\ngeneralized additive model",
+    family = "mono",
+    fontface = "bold"
+  )
+saveit("china_v_us_trade_share")
+```
+

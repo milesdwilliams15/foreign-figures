@@ -1,0 +1,153 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "gray80",
+    "navy"
+  ),
+  binary = c("orange3", "navy")
+)
+source(here::here("my_theme.R"))
+saveit <- function(ht = 4, wd = 6, num = 1) {
+  ggsave(
+    here::here(
+      "005_revisionist_usa",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+## Data
+
+```{r}
+library(peacesciencer)
+create_dyadyears(
+  subset_years = 1816:2010
+) |>
+  filter(ccode1 %in% c(2, 365, 710)) |>
+  add_gml_mids() -> dt
+dt |>
+  filter(hostlev >= 4 | is.na(hostlev)) |>
+  group_by(ccode1, year) |>
+  summarize(
+    ongoing = sum(!is.na(unique(dispnum))),
+    init = sum(!is.na(unique(dispnum[init1 == 1])))
+  ) |>
+  ungroup() |>
+  mutate(
+    country = frcode(
+      ccode1 == 2 ~ "United States",
+      ccode1 == 710 ~ "China",
+      TRUE ~ "Russia"
+    )
+  ) -> dt
+```
+
+## Figures
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(x = year, y = ongoing, color = country) +
+  geom_point(
+    aes(fill = country),
+    alpha = 0.2,
+    color = "black",
+    pch = 21
+  ) +
+  geom_line(
+    stat = "smooth",
+    aes(group = country),
+    method = "gam",
+    method.args = list(family = quasipoisson),
+    se = F,
+    color = "black",
+    linewidth = 1
+  ) +
+  geom_line(
+    stat = "smooth",
+    method = "gam",
+    method.args = list(family = quasipoisson),
+    se = F,
+    linewidth = .5
+  ) +
+  ggpal() +
+  ggpal(aes = "fill") +
+  my_theme() +
+  labs(
+    title = 
+      "MIDs involving the U.S., Russia,\nand China",
+    subtitle = 
+      "Frequency of MID involvement, 1816-2010",
+    color = NULL,
+    fill = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = seq(1820, 2010, by = 20)
+  ) 
+saveit(num = 1)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(x = year, y = init, color = country) +
+  geom_point(
+    aes(fill = country),
+    alpha = 0.2,
+    color = "black",
+    pch = 21
+  ) +
+  geom_line(
+    stat = "smooth",
+    aes(group = country),
+    method = "gam",
+    method.args = list(family = quasipoisson),
+    se = F,
+    color = "black",
+    linewidth = 1
+  ) +
+  geom_line(
+    stat = "smooth",
+    method = "gam",
+    method.args = list(family = quasipoisson),
+    se = F,
+    linewidth = .5
+  ) +
+  ggpal() +
+  ggpal(aes = "fill") +
+  my_theme() +
+  labs(
+    title = 
+      "MIDs started by the U.S., Russia,\nand China",
+    subtitle = 
+      "Number of MID initiations, 1816-2010",
+    color = NULL,
+    fill = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = seq(1820, 2010, by = 20)
+  ) 
+saveit(num = 2)
+```
