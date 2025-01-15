@@ -1,0 +1,248 @@
+---
+title: "U.S. aid to Ukraine"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "gray80",
+    "navy"
+  ),
+  binary = c("orange3", "navy")
+)
+source(here::here("my_theme.R"))
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "006_aid_to_ukraine",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+## Data
+
+```{r}
+## read in the data
+dt <- read_csv(
+  here::here("_data", "us_foreign_aid_country.csv")
+)
+
+## clean up the names
+dt <- janitor::clean_names(dt)
+
+## make the year numeric
+dt |>
+  mutate(
+    year = as.numeric(fiscal_year)
+  ) -> dt
+
+## only keep obligations (for best coverage)
+dt |>
+  filter(
+    transaction_type_name == "Obligations"
+  ) -> dt
+```
+
+## Figures
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  group_by(year) |>
+  summarize(
+    aid = sum(constant_amount, na.rm = T)
+  ) |>
+  ggplot() +
+  aes(x = year, y = aid) +
+  geom_line(
+    color = "orange3"
+  ) +
+  geom_textsmooth(
+    data = . %>% filter(year <= 2000),
+    aes(label = paste0(scales::dollar(mean(aid) / 1e09), " billion")),
+    method = "lm",
+    formula = y ~ 1,
+    se = F,
+    color = "navy",
+    linewidth = 1,
+    family = "mono",
+    vjust = 1.5,
+    fontface = "bold"
+  ) +
+  geom_textsmooth(
+    data = . %>% filter(year > 2000),
+    aes(label = paste0(scales::dollar(mean(aid) / 1e09), " billion")),
+    method = "lm",
+    formula = y ~ 1,
+    se = F,
+    color = "navy",
+    linewidth = 1,
+    family = "mono",
+    vjust = 1.5,
+    fontface = "bold"
+  ) +
+  my_theme() +
+  scale_x_continuous(
+    breaks = seq(1950, 2020, by = 10)
+  ) +
+  scale_y_continuous(
+    labels = ~ scales::dollar(.x / 1e09)
+  ) +
+  labs(
+    title = 
+      "The 21st century boost to U.S. aid",
+    subtitle = 
+      "Total U.S. aid obligations in constant $, 1946-2024",
+    caption = logo
+  )
+saveit(1)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  filter(year >= 1990) |>
+  group_by(year) |>
+  summarize(
+    total = sum(constant_amount, na.rm = T),
+    ukraine = 
+      sum(
+        constant_amount[
+          country_name == "Ukraine"
+        ],
+        na.rm = T
+      )
+  ) |>
+  ggplot() +
+  aes(x = year) +
+  geom_line(
+    aes(y = total),
+    color = "navy",
+    size = 1
+  ) +
+  geom_line(
+    aes(y = ukraine),
+    color = "orange3",
+    size = 1
+  ) +
+  annotate(
+    "text",
+    x = 1995,
+    y = 4e+10,
+    label = "Total Aid",
+    color = "navy",
+    family = "mono",
+    fontface = "bold"
+  ) +
+  annotate(
+    "text",
+    x = 2010,
+    y = 1e+10,
+    label = "Aid to Ukraine",
+    color = "orange3",
+    family = "mono",
+    fontface = "bold"
+  ) +
+  my_theme() +
+  scale_y_continuous(
+    labels = ~ scales::dollar(.x / 1e09)
+  ) +
+  labs(
+    title = 
+      "Total aid spikes because of Ukraine",
+    subtitle = 
+      "Total U.S. aid vs. aid to Ukraine, 1990-2024",
+    caption = logo
+  )
+saveit(2)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  filter(year >= 1990) |>
+  group_by(year) |>
+  summarize(
+    total = sum(constant_amount, na.rm = T),
+    ukraine = 
+      sum(
+        constant_amount[
+          country_name == "Ukraine"
+        ],
+        na.rm = T
+      )
+  ) |>
+  ungroup() |>
+  mutate(
+    ukmean = ukraine[year == 2021],
+    total_adj = ifelse(
+      year >= 2022,
+      (total - ukraine) + ukmean,
+      total
+    )
+  ) |>
+  filter(year >= 2020) |>
+  ggplot() +
+  aes(x = year) +
+  geom_line(
+    aes(y = total_adj),
+    color = "orange3",
+    size = .75,
+    linetype = 2
+  ) +
+  geom_line(
+    aes(y = total),
+    color = "navy",
+    size = 1
+  ) +
+  annotate(
+    "text",
+    x = 2023.5,
+    y = 7e+10,
+    label = "Actual\ntotal",
+    color = "navy",
+    family = "mono",
+    fontface = "bold"
+  ) +
+  annotate(
+    "text",
+    x = 2022.5,
+    y = 45e+09,
+    label = "No extra aid\nto Ukraine",
+    color = "orange3",
+    family = "mono",
+    fontface = "bold"
+  ) +
+  my_theme() +
+  scale_y_continuous(
+    labels = ~ scales::dollar(.x / 1e09)
+  ) +
+  labs(
+    title = 
+      "What U.S. aid would be without Ukraine",
+    subtitle = 
+      "Observed vs. simulated U.S. aid, 2020-2024",
+    caption = logo
+  )
+saveit(3)
+```
+

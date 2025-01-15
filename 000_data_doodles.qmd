@@ -32,6 +32,116 @@ saveit <- function(file, ht = 4, wd = 6) {
 }
 ```
 
+## U.S. Foreign Aid
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+## Data:
+dt <- read_csv(
+  here::here("_data", "us_foreign_aid_country.csv")
+)
+
+dt |>
+  janitor::clean_names() |>
+  filter(
+    transaction_type_name ==
+      "Disbursements"
+  ) |>
+  group_by(fiscal_year) |>
+  summarize(
+    aid = sum(constant_amount)
+  ) |>
+  ggplot() +
+  aes(x = as.numeric(fiscal_year), y = aid) +
+  geom_line(
+    color = "navy"
+  ) +
+  geom_point(color = "orange3") +
+  my_theme() +
+  labs(
+    title = 
+      "U.S. Aid Giving Since 2001",
+    subtitle = 
+      "U.S. aid disbursements in billions of constant $",
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = ~ scales::dollar(.x / 1e09)
+  )
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  janitor::clean_names() |>
+  filter(
+    transaction_type_name ==
+      "Disbursements",
+    country_name == "Ukraine"
+  ) |>
+  ggplot() +
+  aes(x = as.numeric(fiscal_year), y = constant_amount) +
+  geom_line(
+    color = "navy"
+  ) +
+  geom_point(color = "orange3") +
+  my_theme() +
+  labs(
+    title = 
+      "U.S. Aid Giving to Ukraine Since 2001",
+    subtitle = 
+      "U.S. aid disbursements in billions of constant $",
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = ~ scales::dollar(.x / 1e09)
+  )
+saveit(
+  "us_aid_ukraine"
+)
+```
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  janitor::clean_names() |>
+  filter(
+    transaction_type_name ==
+      "Disbursements"
+  ) |>
+  group_by(fiscal_year) |>
+  summarize(
+    aid = sum(constant_amount),
+    ukr = sum(constant_amount[country_name == "Ukraine"]),
+    share = ukr / aid
+  ) |>
+  ggplot() +
+  aes(x = as.numeric(fiscal_year), y = share) +
+  geom_line(
+    color = "navy"
+  ) +
+  geom_point(color = "orange3") +
+  my_theme() +
+  labs(
+    title = 
+      "U.S. Aid Giving to Ukraine Since 2001",
+    subtitle = 
+      "Share of U.S. aid dispursements going to Ukraine",
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  )
+```
+
+
 ## Int'l Conflict Rate over Time
 
 ```{r}
