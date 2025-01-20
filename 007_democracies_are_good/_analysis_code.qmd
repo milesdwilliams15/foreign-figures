@@ -1,0 +1,216 @@
+---
+title: "Democracies are gooder"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "gray80",
+    "navy"
+  ),
+  binary = c("orange3", "navy")
+)
+source(here::here("my_theme.R"))
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "007_democracies_are_good",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(peacesciencer)
+create_stateyears(
+  subset_years = 1946:2010
+) |>
+  add_democracy() |>
+  add_gml_mids() |>
+  add_sdp_gdp() |>
+  add_cow_trade() -> dt
+
+dt |>
+  group_by(year) |>
+  mutate(
+    qdem = frcode(
+      xm_qudsest < quantile(xm_qudsest, 1/3)  ~
+        "Low",
+      between(xm_qudsest, quantile(xm_qudsest, 1/3), 
+              quantile(xm_qudsest, 2/3)) ~
+        "Medium",
+      xm_qudsest >= quantile(xm_qudsest, 2/3) ~ 
+        "High"
+    )
+  ) |>
+  ungroup() -> dt
+
+library(wbstats)
+ind <- c("matmort" = "SH.STA.MMRT")
+wbdt <- wb_data(ind, start_date = 2000, end_date = 2018)
+wbdt$ccode <- countrycode::countrycode(
+  wbdt$country, "country.name", "cown"
+)
+wbdt$year <- wbdt$date
+create_stateyears(
+  subset_years = 2000:2018
+) |>
+  add_democracy() |>
+  group_by(year) |>
+  mutate(
+    qdem = frcode(
+      xm_qudsest < quantile(xm_qudsest, 1/3, na.rm = T)  ~
+        "Low",
+      between(xm_qudsest, quantile(xm_qudsest, 1/3, na.rm = T), 
+              quantile(xm_qudsest, 2/3, na.rm = T)) ~
+        "Medium",
+      xm_qudsest >= quantile(xm_qudsest, 2/3, na.rm = T) ~ 
+        "High"
+    )
+  ) |>
+  ungroup() |>
+  left_join(
+    wbdt, by = c("ccode", "year")
+  ) -> wbdt
+```
+
+## Figures
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(x = year, y = gmlmidonset_init, color = qdem) +
+  geom_labelsmooth(
+    aes(label = qdem),
+    linewidth = 1,
+    show.legend = F,
+    method = "gam",
+    method.args = list(family = binomial),
+    hjust = .4
+  ) +
+  my_theme() +
+  ggpal() +
+  labs(
+    title = "Democracies have tried to avoid war",
+    subtitle = 
+      "Smoothed rate of international militarized dispute\ninitiation by quality of democracy (Low, Medium, or High)",
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = seq(1950, 2010, by = 10)
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  )
+saveit(1)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(x = year, y = exp(wbgdppc2011est), color = qdem) +
+  geom_labelsmooth(
+    aes(label = qdem),
+    linewidth = 1,
+    show.legend = F,
+    method = "gam",
+    method.args = list(family = quasipoisson)
+  ) +
+  my_theme() +
+  ggpal() +
+  labs(
+    title = "Democracies' citizens have been richer",
+    subtitle = 
+      "Smoothed GDP per capita by quality of democracy\n(Low, Medium, or High)",
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = seq(1950, 2010, by = 10)
+  ) +
+  scale_y_continuous(
+    labels = scales::dollar
+  )
+saveit(2)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(x = year, y = exports * 1e06 / exp(wbpopest), color = qdem) +
+  geom_labelsmooth(
+    aes(label = qdem),
+    linewidth = 1,
+    show.legend = F,
+    method = "gam",
+    method.args = list(family = quasipoisson),
+    hjust = .9
+  ) +
+  my_theme() +
+  ggpal() +
+  labs(
+    title = "Democracies have made more $ on\nexports",
+    subtitle = 
+      "Smoothed exports per capita by quality of democracy\n(Low, Medium, or High)",
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = seq(1950, 2010, by = 10)
+  ) +
+  scale_y_continuous(
+    labels = scales::dollar
+  )
+saveit(3)
+```
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(wbdt) +
+  aes(x = year, y = matmort, color = qdem) +
+  geom_labelsmooth(
+    aes(label = qdem),
+    linewidth = 1,
+    show.legend = F,
+    method = "gam",
+    method.args = list(family = quasipoisson),
+    hjust = .1
+  ) +
+  my_theme() +
+  ggpal() +
+  labs(
+    title = "Democracies have had lower maternal\nmortality",
+    subtitle = 
+      "Smoothed maternal mortality per 100,000 by quality\nof democracy (Low, Medium, or High)",
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = seq(2000, 2018, by = 4)
+  ) +
+  scale_y_continuous(
+    labels = scales::comma
+  )
+saveit(4)
+```

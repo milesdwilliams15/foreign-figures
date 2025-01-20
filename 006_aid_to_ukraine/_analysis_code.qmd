@@ -54,6 +54,10 @@ dt |>
   filter(
     transaction_type_name == "Obligations"
   ) -> dt
+
+## drop region summaries
+dt |>
+  filter(region_name != "World") -> dt
 ```
 
 ## Figures
@@ -145,7 +149,7 @@ dt |>
   annotate(
     "text",
     x = 1995,
-    y = 4e+10,
+    y = 3e+10,
     label = "Total Aid",
     color = "navy",
     family = "mono",
@@ -217,7 +221,7 @@ dt |>
   annotate(
     "text",
     x = 2023.5,
-    y = 7e+10,
+    y = 55e+09,
     label = "Actual\ntotal",
     color = "navy",
     family = "mono",
@@ -226,7 +230,7 @@ dt |>
   annotate(
     "text",
     x = 2022.5,
-    y = 45e+09,
+    y = 35e+09,
     label = "No extra aid\nto Ukraine",
     color = "orange3",
     family = "mono",
@@ -245,4 +249,73 @@ dt |>
   )
 saveit(3)
 ```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  filter(year >= 2020) |>
+  ggplot() +
+  aes(x = year, y = constant_amount) +
+  geom_line(
+    aes(group = country_name),
+    color = "navy",
+    alpha = 0.4
+  ) +
+  geom_textline(
+    data = . %>%
+      filter(country_name == "Ukraine"),
+    color = "orange3",
+    linewidth = 1,
+    label = "Ukraine",
+    hjust = .4,
+    vjust = -.5
+  ) +
+  my_theme() +
+  labs(
+    title = "Aid to Ukraine outpaces everything",
+    subtitle = "U.S. aid to countries in billions, 2020-2024",
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = ~ scales::dollar(.x / 1e09)
+  )
+saveit(4)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  filter(year >= 2020) |>
+  group_by(year) |>
+  summarize(
+    "Total Aid" = sum(constant_amount),
+    "Aid to Ukraine" = constant_amount[
+      country_name == "Ukraine"
+    ]
+  ) |>
+  pivot_longer(
+    -year
+  ) |>
+  ggplot() +
+  aes(x = year, y = value, color = name) +
+  geom_line(
+    linewidth = 1
+  ) +
+  my_theme() +
+  labs(
+    title = "Aid to Ukraine outpaces everything",
+    subtitle = "U.S. aid to countries in billions, 2020-2024",
+    caption = logo,
+    color = NULL
+  ) +
+  scale_y_continuous(
+    labels = ~ scales::dollar(.x / 1e09)
+  )
+saveit(5)
+```
+
 
