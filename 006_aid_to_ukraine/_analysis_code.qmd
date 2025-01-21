@@ -16,7 +16,13 @@ set_palette(
     "gray80",
     "navy"
   ),
-  binary = c("orange3", "navy")
+  binary = c("orange3", "navy"),
+  diverging = c(
+    "orange3",
+    "white",
+    "navy"
+  ),
+  sequential = c("white", "navy")
 )
 source(here::here("my_theme.R"))
 saveit <- function(num = 1, ht = 4, wd = 6) {
@@ -292,8 +298,10 @@ dt |>
   filter(year >= 2020) |>
   group_by(year) |>
   summarize(
-    "Total Aid" = sum(constant_amount),
-    "Aid to Ukraine" = constant_amount[
+    "Everything Else" = sum(constant_amount[
+      country_name != "Ukraine"
+    ]),
+    "Ukraine" = constant_amount[
       country_name == "Ukraine"
     ]
   ) |>
@@ -307,15 +315,80 @@ dt |>
   ) +
   my_theme() +
   labs(
-    title = "Aid to Ukraine outpaces everything",
+    title = "Little evidence of cuts to other\nobligations",
     subtitle = "U.S. aid to countries in billions, 2020-2024",
     caption = logo,
-    color = NULL
+    color = "Aid to..."
   ) +
   scale_y_continuous(
     labels = ~ scales::dollar(.x / 1e09)
+  ) +
+  ggpal(
+    "binary",
+    breaks = c("Ukraine", "Everything Else")
   )
 saveit(5)
 ```
 
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+wrld_map <- map_data("world") |>
+  mutate(
+    country_code = countrycode::countrycode(
+      region, "country.name", "iso3c"
+    )
+  )
+
+dt |>
+  filter(year >= 2020) |>
+  filter(country_code != "UKR") |>
+  group_by(country_code) |>
+  summarize(
+    aid_change = (constant_amount[
+      year == 2023
+    ] - constant_amount[
+      year == 2021
+    ]) 
+  ) |>
+  right_join(wrld_map, by = "country_code") |>
+  ggplot() +
+  aes(
+    x = long,
+    y = lat,
+    fill = aid_change,
+    group = group
+  ) +
+  geom_polygon(
+    color = "black",
+    size = .1
+  ) +
+  coord_fixed() +
+  my_theme() +
+  theme(
+    axis.text = element_blank(),
+    legend.title.position = "top",
+    legend.title = element_text(
+      hjust = .5
+    )
+  ) +
+  ggpal(
+    "diverging",
+    "fill",
+    labels = ~ scales::dollar(.x / 1e06)
+  ) +
+  labs(
+    fill = expression(Delta*" to Aid in Millions"),
+    subtitle = "Changes in U.S. aids, 2021 vs. 2023",
+    title = 
+      "Aid is up in some places\nand down in others"
+  ) +
+  guides(
+    fill = guide_legend(
+      keywidth = 1
+    )
+  )
+saveit(6)
+```
 
