@@ -1,0 +1,255 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "gray80",
+    "navy"
+  ),
+  binary = c("orange3", "navy")
+)
+source(here::here("my_theme.R"))
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "008_greenland_troops",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(troopdata)
+
+troops <- get_troopdata(
+  host = "Greenland",
+  branch = T,
+  guard_reserve = T,
+  civilians = T
+)
+
+bases <- get_basedata(
+  country_count = F
+) |>
+  filter(countryname == "Greenland")
+
+funds <- get_builddata(NA, 2008, 2019)
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(troops) +
+  aes(
+    x = year,
+    y = troops_ad
+  ) +
+  geom_line(
+    linewidth = 1,
+    color = "orange3"
+  ) +
+  ggrepel::geom_text_repel(
+    data = . %>%
+      filter(troops_ad == max(troops_ad)),
+    aes(label = scales::comma(troops_ad)),
+    nudge_x = 15,
+    color = "navy",
+    family = "mono",
+    fontface = "bold"
+  ) +
+  ggrepel::geom_text_repel(
+    data = . %>%
+      filter(year == 2024),
+    aes(label = scales::comma(troops_ad)),
+    nudge_y = 1000,
+    nudge_x = -10,
+    color = "navy",
+    family = "mono",
+    fontface = "bold"
+  ) +
+  my_theme() +
+  labs(
+    title = 
+      "Greenland has hosted U.S. troops\nfor a long time",
+    subtitle = 
+      "Total U.S. troops stationed in Greenland, 1950-2024",
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = seq(1950, 2020, by = 10)
+  ) +
+  scale_y_continuous(
+    labels = scales::comma
+  )
+saveit(1)
+```
+
+
+```{r}
+#| fig-height: 6
+#| fig-width: 4.4
+
+wmap <- map_data("world") |>
+  filter(region == "Greenland")
+
+ggplot(wmap) +
+  aes(long, lat, group = group) +
+  geom_polygon(
+    fill = "navy",
+    color = "white",
+    size = .1
+  ) +
+  geom_point(
+    data = bases,
+    aes(lon, lat, group = 1),
+    color = "orange3",
+    size = 3,
+    pch = 21,
+    fill = "white"
+  ) +
+  geom_point(
+    data = bases,
+    aes(lon, lat, group = 1),
+    color = "orange3",
+    size = 1
+  ) +
+  ggrepel::geom_text_repel(
+    data = bases,
+    aes(lon, lat, group = 1, 
+        label = basename),
+    nudge_x = 25,
+    nudge_y = 1,
+    color = "orange3",
+    family = "mono",
+    fontface = "bold"
+  ) +
+  my_theme() +
+  coord_fixed(
+    ratio = 3
+  ) +
+  theme(
+    axis.text = element_blank(),
+    plot.title.position = "plot"
+  ) +
+  labs(
+    title = 
+      "Greenland hosts the world's\nnorthernmost U.S. base",
+    caption = logo
+  ) 
+saveit(2, 6, 4.4)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+funds |>
+  group_by(countryname) |>
+  summarize(
+    spent = sum(spend_construction)
+  ) |>
+  ungroup() |>
+  filter(rank(-spent) <= 11 | 
+           countryname == "Greenland") |>
+  filter(!str_detect(countryname, "Unspecified")) -> pltdt
+ggplot(pltdt) +
+  aes(
+    y = reorder(countryname, spent),
+    x = spent
+  ) +
+  geom_col(
+    fill = "gray"
+  ) +
+  geom_col(
+    data = . %>%
+      filter(spent == max(spent)),
+    fill = "navy"
+  ) +
+  geom_col(
+    data = . %>%
+      filter(countryname == "Greenland"),
+    fill = "orange3"
+  ) +
+  my_theme() +
+  theme(
+    panel.grid.major.y = element_blank()
+  ) +
+  scale_x_continuous(
+    labels = ~ 
+      paste0(
+        scales::dollar((.x * 1e03) / 1e09),
+        " bil"
+      )
+  ) +
+  scale_y_discrete(
+    labels = pltdt |>
+      arrange(spent) |>
+      pull(countryname)
+  ) +
+  geom_text(
+    data = . %>%
+      filter(
+        countryname == "United States"
+      ),
+    aes(
+      label = paste0(
+        scales::dollar(
+          (spent * 1e03) / 1e09
+        ),
+        " billion"
+      )
+    ),
+    color = "white",
+    hjust = 1.25,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  geom_text(
+    data = . %>%
+      filter(
+        countryname == "Greenland"
+      ),
+    aes(
+      label = paste0(
+        scales::dollar(
+          (spent / 1e03)
+        ),
+        " million"
+      )
+    ),
+    color = "black",
+    hjust = -.1,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  labs(
+    title = 
+      "Thule Air Base is cheap",
+    subtitle = 
+      "Cummulative sum of construction and housing\ncosts for U.S. bases, 2008-2019",
+    caption = logo
+  )
+saveit(3)
+```
+

@@ -13,10 +13,12 @@ library(coolorrr)
 set_palette(
   qualitative = c(
     "orange3",
-    "black",
+    "gray40",
     "navy"
   ),
-  binary = c("orange3", "navy")
+  binary = c("orange3", "navy"),
+  diverging = c("orange3", "white", "navy"),
+  sequential = c("white", "navy")
 )
 source(here::here("my_theme.R"))
 saveit <- function(file, ht = 4, wd = 6) {
@@ -31,6 +33,71 @@ saveit <- function(file, ht = 4, wd = 6) {
   )
 }
 ```
+
+## U.S troops in Greenland
+
+```{r}
+library(troopdata)
+
+troops <- get_troopdata(
+  host = "Greenland",
+  branch = T,
+  guard_reserve = T,
+  civilians = T
+)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(troops) +
+  aes(
+    x = year,
+    y = troops_ad
+  ) +
+  geom_line(
+    linewidth = 1,
+    color = "orange3"
+  ) +
+  ggrepel::geom_text_repel(
+    data = . %>%
+      filter(troops_ad == max(troops_ad)),
+    aes(label = scales::comma(troops_ad)),
+    nudge_x = 15,
+    color = "navy",
+    family = "mono",
+    fontface = "bold"
+  ) +
+  ggrepel::geom_text_repel(
+    data = . %>%
+      filter(year == 2024),
+    aes(label = scales::comma(troops_ad)),
+    nudge_y = 1000,
+    nudge_x = -10,
+    color = "navy",
+    family = "mono",
+    fontface = "bold"
+  ) +
+  my_theme() +
+  labs(
+    title = 
+      "Greenland has hosted U.S. troops\nfor a long time",
+    subtitle = 
+      "Total U.S. troops stationed in Greenland, 1950-2024",
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = seq(1950, 2020, by = 10)
+  ) +
+  scale_y_continuous(
+    labels = scales::comma
+  )
+saveit(
+  "greenland_troops"
+)
+```
+
 
 ## U.S. Foreign Aid
 
