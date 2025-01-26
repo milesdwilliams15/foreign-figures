@@ -34,6 +34,77 @@ saveit <- function(file, ht = 4, wd = 6) {
 }
 ```
 
+## U.S. military aid vs foreign aid
+
+```{r}
+## the data
+dt <- read_csv(
+  here::here(
+    "_data",
+    "us_foreign_aid_ukraine.csv"
+  )
+)
+
+dt <- dt |>
+  janitor::clean_names() 
+
+dt |>
+  filter(
+    fiscal_year >= 2020
+  ) |>
+  mutate(
+    org = frcode(
+      managing_agency_acronym == "USAID" ~
+        "USAID",
+      managing_agency_acronym == "DOD" ~ 
+        "DOD",
+      TRUE ~ "Other"
+    )
+  ) |>
+  group_by(
+    fiscal_year,
+    org
+  ) |>
+  summarize(
+    aid = sum(constant_dollar_amount)
+  ) |>
+  ungroup() -> dt
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  ggplot() +
+  aes(
+    x = fiscal_year,
+    y = aid,
+    color = org
+  ) +
+  geom_line() +
+  my_theme() +
+  scale_y_continuous(
+    labels = ~ paste0(
+      scales::dollar(.x / 1e09),
+      " bil"
+    )
+  ) +
+  ggpal() +
+  labs(
+    title = 
+      "USAID manages the largest portfolio\nof aid to Ukraine compared to the DOD\nand other agencies",
+    subtitle = 
+      "Billions of 2024 constant dollars shown, 2020-2024",
+    caption = logo,
+    color = NULL
+  )
+saveit(
+  "ukraine_aid_by_agency"
+)
+```
+
+
 ## U.S troops in Greenland
 
 ```{r}
