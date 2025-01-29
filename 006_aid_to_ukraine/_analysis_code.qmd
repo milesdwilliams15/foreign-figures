@@ -392,3 +392,226 @@ dt |>
 saveit(6)
 ```
 
+### Part 3
+
+```{r}
+## the kiel inst data
+dt <- read_csv(
+  here::here(
+    "_data",
+    "keil_ukraine_support_tracker_release_20.csv"
+  )
+)
+
+dt |>
+  filter(
+    total_value_dummy == 1
+  ) |> 
+  transmute(
+    donor,
+    year = earmarked_year,
+    usd_amount = source_reported_value |>
+      str_remove_all(",") |>
+      as.numeric(),
+    euro_amount = tot_activity_value_EUR |>
+      str_remove_all(",") |>
+      as.numeric(),
+    type = aid_type_general
+  ) -> dt
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  filter(donor == "United States") |>
+  group_by(year) |>
+  summarize(
+    amount = sum(usd_amount)
+  ) |>
+  ggplot() +
+  aes(
+    x = year,
+    y = amount
+  ) +
+  geom_col(
+    fill = "navy"
+  ) +
+  geom_text(
+    aes(
+      label = paste0(
+        scales::dollar(amount / 1e09),
+        " bil"
+      )
+    ),
+    vjust = c(1.5, 1.5, 1.5, -.5),
+    family = "mono",
+    fontface = "bold",
+    color = "orange3"
+  ) +
+  my_theme() +
+  scale_y_continuous(
+    labels = ~ paste0(
+      scales::dollar(.x / 1e09),
+      " bil"
+    )
+  ) +
+  ggpal() +
+  labs(
+    title = 
+      "Total U.S. aid to Ukraine",
+    subtitle = 
+      "Data source: Kiel Institute's Ukraine Support Tracker",
+    caption = logo,
+    color = NULL
+  )
+saveit(7)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  group_by(donor) |>
+  summarize(
+    amount = sum(euro_amount, na.rm = T)
+  ) |>
+  ungroup() |>
+  mutate(
+    amount = amount / sum(amount)
+  ) |>
+slice_max(amount, n = 10) -> plt_dt
+ggplot(plt_dt |>
+         mutate(
+           donor = ifelse(
+             str_detect(donor, "EU"),
+             "EU",
+             donor
+           )
+         )) +
+  aes(
+    x = amount,
+    y = reorder(donor, amount)
+  ) +
+  geom_col(
+    fill = "navy"
+  ) +
+  geom_text(
+    aes(
+      label = ifelse(
+          amount == max(amount),
+          paste0(round(amount*100,1), "% of aid to Ukraine"),
+          " "
+        )
+    ),
+    color = "orange3",
+    family = "mono",
+    fontface = "bold",
+    nudge_x = -0.005,
+    hjust = 1
+  ) +
+  geom_label(
+    aes(label = donor),
+    color = "navy",
+    family = "mono",
+    fontface = "bold",
+    hjust = 0,
+    nudge_x = .005,
+    fill = "gray95",
+    label.size = NA
+  ) +
+  my_theme() +
+  labs(
+    title = 
+      "The U.S. ranks 1st among donors\nto Ukraine",
+    subtitle = 
+      "Data source: Kiel Institute's Ukraine Support Tracker",
+    caption = logo
+  ) +
+  scale_x_continuous(
+    labels = scales::percent,
+    limits = c(0, .4)
+  ) +
+  scale_y_discrete(
+    labels = c(
+      paste0(10:4, "th"),
+      "3rd", "2nd", "1st"
+    )
+  ) +
+  theme(
+    panel.grid.major.y = element_blank()
+  )
+saveit(8)
+```
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  group_by(donor) |>
+  mutate(
+    tot = sum(euro_amount, na.rm = T),
+    type_pct = euro_amount / tot
+  ) |>
+  ungroup() |>
+  mutate(
+    tot_pct = tot / sum(unique(tot))
+  ) |>
+  filter(
+    donor %in% unique(plt_dt$donor)
+  ) |>
+  mutate(
+    donor = ifelse(
+      str_detect(donor, "EU"),
+      "EU",
+      donor
+    )
+  ) |>
+  ggplot() +
+  aes(
+    x = tot_pct * type_pct,
+    y = reorder(donor, tot),
+    fill = type
+  ) +
+  geom_col() +
+  geom_label(
+    aes(label = donor, x = tot_pct),
+    color = "navy",
+    family = "mono",
+    fontface = "bold",
+    hjust = 0,
+    nudge_x = .005,
+    fill = "gray95",
+    label.size = NA
+  ) +
+  ggpal(aes = "fill") +
+  my_theme() +
+  labs(
+    title = 
+      "Ukraine gets more military aid from\nthe U.S. than from any other donor",
+    subtitle = 
+      "Data source: Kiel Institute's Ukraine Support Tracker",
+    caption = logo,
+    fill = "Type of\nAid"
+  ) +
+  scale_x_continuous(
+    labels = scales::percent,
+    limits = c(0, .4)
+  ) +
+  scale_y_discrete(
+    labels = c(
+      paste0(10:4, "th"),
+      "3rd", "2nd", "1st"
+    )
+  ) +
+  theme(
+    panel.grid.major.y = element_blank(),
+    legend.title = element_text(hjust = 1)
+  )
+saveit(9)
+```
+
