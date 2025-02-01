@@ -1,0 +1,237 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "gray80",
+    "navy"
+  ),
+  binary = c("orange3", "navy"),
+  diverging = c(
+    "orange3",
+    "white",
+    "navy"
+  ),
+  sequential = c("white", "navy")
+)
+source(here::here("my_theme.R"))
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "009_tariffs_and_trade",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(wbstats)
+inds <- c(
+  tariff_rate = "TM.TAX.MRCH.WM.AR.ZS", 
+  imports = "NE.IMP.GNFS.KN",
+  exports = "NE.EXP.GNFS.KN"
+)
+dt <- wb_data(
+  indicator = inds,
+  start_date = 1989,
+  end_date = 2023
+) 
+
+## filter to just U.S.
+dt <- dt |> filter(country == "United States")
+
+## calculate the change in each
+pct_change <- function(x1, x0) {
+  (x1 - x0) / x0
+}
+dt |>
+  mutate(
+    tariff_change = pct_change(
+      tariff_rate, lag(tariff_rate)
+    ),
+    exports_change = pct_change(
+      exports, lag(exports)
+    ),
+    imports_change = pct_change(
+      imports, lag(imports)
+    ),
+    net_trade = exports - imports,
+    net_trade_change = pct_change(
+      net_trade, lag(net_trade)
+    ),
+    tariff_cat = frcode(
+      tariff_change < 0 ~ "Decrease",
+      tariff_change == 0 ~ "No Change",
+      tariff_change > 0 ~ "Increase"
+    )
+  ) |> 
+  drop_na() -> dt
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  pivot_longer(
+    cols = c(imports, exports)
+  ) |>
+  ggplot() +
+  aes(x = date, y = value, color = name) +
+  geom_point(alpha = 0.4) +
+  geom_labelsmooth(
+    aes(label = name),
+    linewidth = 1,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  ggpal("binary") +
+  my_theme() +
+  theme(
+    legend.position = ""
+  ) +
+  labs(
+    title = 
+      "U.S. imports and exports, 1990-2022",
+    subtitle =
+      "Exports/imports of goods and services \n(Data source: World Bank)",
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = seq(1990, 2020, by = 5)
+  ) +
+  scale_y_continuous(
+    labels = ~ paste0("$", .x / 1e12, " tril")
+  )
+saveit(1)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(x = date, y = tariff_rate) +
+  geom_point(
+    alpha = 0.4,
+    color = "navy"
+  ) +
+  geom_smooth(
+    data = . %>%
+      filter(tariff_rate != max(tariff_rate)),
+    se = F,
+    color = "navy"
+  ) +
+  my_theme() +
+  labs(
+    title = 
+      "U.S. tariff rate, 1990-2022",
+    subtitle =
+      "Tariff rate calculated as a weighted average\n(Data source: World Bank)",
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = seq(1990, 2020, by = 5)
+  ) +
+  scale_y_continuous(
+    labels = ~ paste0(.x, "%")
+  )
+saveit(2)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+mean_ci_83 <- function(x) {
+  mean_x <- mean(x, na.rm = T)
+  mean_boot <- 1:1000 |>
+    map(
+      ~ sample(x, length(x), T) |>
+        mean(na.rm = T)
+    ) |> 
+    unlist()
+  data.frame(
+    y = mean_x,
+    ymin = quantile(mean_boot, 1 - 0.834),
+    ymax = quantile(mean_boot, 0.834)
+  )
+}
+
+dt |> 
+  pivot_longer(
+    cols = c(imports_change, exports_change)
+  ) |>
+  mutate(
+    name = str_remove_all(name, "_change")
+  ) |>
+  ggplot() +
+  aes(x = value, y = tariff_cat, color = name) +
+  stat_summary(
+    fun.data = mean_ci_83,
+    position = position_dodge(-.5)
+  ) +
+  ggpal("binary") +
+  my_theme() +
+  theme(
+    legend.title = element_text(hjust = 1)
+  ) +
+  labs(
+    title = 
+      "Average U.S. imports and exports by\nchange to tariff rate",
+    subtitle = 
+      "The mean export/import % growth with 83% CIs\n(Data source: World Bank)",
+    caption = logo,
+    color = expression("%"*Delta*" in:")
+  ) +
+  scale_x_continuous(
+    labels = ~ paste0(.x, "%")
+  )
+saveit(3)
+```
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(x = net_trade_change, y = tariff_cat) +
+  stat_summary(
+    fun.data = mean_ci_83,
+    color = "navy"
+  ) +
+  my_theme() +
+  labs(
+    title = 
+      "Average U.S. net trade by\nchange to tariff rate",
+    subtitle = 
+      "The mean % change to net trade with 83% CIs\n(Data source: World Bank)",
+    caption = logo
+  ) +
+  scale_x_continuous(
+    labels = ~ paste0(.x, "%")
+  )
+saveit(4)
+```
+

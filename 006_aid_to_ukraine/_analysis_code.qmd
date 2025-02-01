@@ -68,6 +68,8 @@ dt |>
 
 ## Figures
 
+### Part 1
+
 ```{r}
 #| fig-height: 4
 #| fig-width: 6
@@ -255,6 +257,7 @@ dt |>
   )
 saveit(3)
 ```
+### Part 2
 
 ```{r}
 #| fig-height: 4
@@ -409,16 +412,36 @@ dt |>
   ) |> 
   transmute(
     donor,
+    date = announcement_date,
     year = earmarked_year,
+    explanation,
+    measure,
     usd_amount = source_reported_value |>
       str_remove_all(",") |>
       as.numeric(),
     euro_amount = tot_activity_value_EUR |>
       str_remove_all(",") |>
       as.numeric(),
-    type = aid_type_general
+    type = aid_type_general,
+    what = aid_type_specific,
+    source_value = source_reported_value,
+    channel,
+    location
   ) -> dt
 ```
+
+```{r}
+dt |>
+  filter(
+    donor == "United States"
+  ) |> 
+  summarize(
+    allocation = sum(usd_amount[measure == "Allocation"]),
+    commitment = sum(usd_amount[measure == "Commitment"]),
+    total = allocation + commitment
+  )
+```
+
 
 ```{r}
 #| fig-height: 4

@@ -82,7 +82,13 @@ dt |>
     y = aid,
     color = org
   ) +
-  geom_line() +
+  geom_line(
+    linewidth = 1
+  ) +
+  geom_point(
+    pch = 21,
+    fill = "white"
+  ) +
   my_theme() +
   scale_y_continuous(
     labels = ~ paste0(
