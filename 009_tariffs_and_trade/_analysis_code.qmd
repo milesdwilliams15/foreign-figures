@@ -168,13 +168,13 @@ mean_ci_83 <- function(x) {
   mean_boot <- 1:1000 |>
     map(
       ~ sample(x, length(x), T) |>
-        mean(na.rm = T)
+        mean(na.rm = T) - mean_x
     ) |> 
     unlist()
   data.frame(
     y = mean_x,
-    ymin = quantile(mean_boot, 1 - 0.834),
-    ymax = quantile(mean_boot, 0.834)
+    ymin = mean_x - quantile(mean_boot, .5 - (0.834/2)),
+    ymax = mean_x - quantile(mean_boot, .5 + (0.834/2))
   )
 }
 
