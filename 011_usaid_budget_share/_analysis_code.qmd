@@ -1,0 +1,200 @@
+---
+title: "USAID budget share"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "gray80",
+    "navy"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "011_usaid_budget_share",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+## Data
+
+```{r}
+## macro economic data for gov't expenditure
+macro_dt <- read_csv(
+  here::here("_data", "GMD.csv")
+)
+macro_dt <- macro_dt |>
+  filter(
+    countryname == "United States"
+  ) |>
+  select(year, govexp, govrev, govtax, 
+         govdef, govdebt) |>
+  mutate(
+    across(
+      -year,
+      ~ .x * 1e06
+    )
+  )
+
+## usaid data
+aid_dt <- read_csv(
+  here::here(
+    "_data",
+    "us_foreign_aid_country.csv"
+  )
+)
+aid_dt <- aid_dt |>
+  filter(
+    `Region Name` != "World"
+  ) |>
+  mutate(year = `Fiscal Year` |>
+           as.numeric()) |>
+  group_by(year) |>
+  summarize(
+    aid = sum(current_amount)
+  ) |>
+  ungroup() |>
+  filter(year < 2024)
+
+## defense spending
+def_dt <- peacesciencer::cow_nmc |>
+  filter(ccode == 2) |>
+  select(year, milex) |>
+  mutate(
+    milex = milex * 1e03
+  )
+  
+
+## merge
+dt <- left_join(aid_dt, macro_dt) |>
+  left_join(def_dt)
+```
+
+## Figures
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(x = year, y = aid / 1e09) +
+  geom_point(
+    color = "orange3"
+  ) +
+  geom_smooth(
+    method = "gam",
+    se = F,
+    color = "navy"
+  ) +
+  my_theme() +
+  labs(
+    title = 
+      "Total U.S. aid obligations\nin billions, 1946-2023",
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = scales::dollar
+  )
+saveit(1)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(x = year, y = aid / govexp) +
+  geom_point(
+    color = "orange3"
+  ) +
+  geom_smooth(
+    method = "gam",
+    se = F,
+    color = "navy"
+  ) +
+  my_theme() +
+  labs(
+    title = 
+      "U.S. aid share of government\nexpenditures, 1946-2023",
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  )
+saveit(2)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  mutate(
+    aid_share = aid / govexp,
+    def_share = milex / govexp
+  ) |>
+  pivot_longer(
+    aid_share:def_share
+  ) |>
+  mutate(
+    name = ifelse(
+      name == "aid_share",
+      "Foreign Aid",
+      "Defense"
+    )
+  ) |>
+  ggplot() +
+  aes(x = year, y = value, color = name) +
+  geom_point() +
+  geom_labelsmooth(
+    aes(label = name),
+    linewidth = 1,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  my_theme() +
+  theme(
+    legend.position = ""
+  ) +
+  ggpal("binary") +
+  labs(
+    title = 
+      "U.S. aid vs. defense share of gov't\nexpenditures, 1946-2023",
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  )
+saveit(3)
+```
+
+```{r}
+dt |>
+  filter(year == 2016) |>
+  summarize(
+    def = milex / 1e09,
+    def_share = milex / govexp,
+    aid = aid / 1e09,
+    aid_share = aid / (govexp / 1e09),
+    ratio = def / aid
+  )
+```
+
