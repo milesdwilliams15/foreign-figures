@@ -1,0 +1,221 @@
+---
+title: "Who gets U.S. aid?"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(mgcv)
+library(modelsummary)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "gray80",
+    "navy"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "012_who_gets_us_aid",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+dt <- read_csv(
+  "https://tinyurl.com/usaidhr"
+)
+
+dt |>
+  mutate(
+    aid = ifelse(aid < 0, 0, aid),
+    rid = country |>
+      as.factor() |>
+      as.numeric(),
+    ccode = countrycode::countrycode(
+      country, "country.name", "cown"
+    )
+  ) -> dt
+
+dt |>
+  filter(
+    year > 2001
+  ) -> dt
+
+library(troopdata)
+tp_dt <- get_troopdata()
+
+dt <- left_join(dt, tp_dt, by = c("year", "ccode"))
+
+dt <- dt |>
+  mutate(
+    democracy = frcode(
+      democracy == "Autocracy" ~ "Autocracy",
+      democracy == "Anocracy" ~ "Anocracy",
+      democracy == "Democracy" ~ "Democracy"
+    ),
+    defensive_alliance = ifelse(
+      defensive_alliance == 1,
+      "Allies",
+      "Not Allies"
+    )
+  )
+```
+
+## Figures
+
+```{r}
+## model fit
+gam(
+  aid ~ 
+    physint +
+    asinh(imports) +
+    asinh(exports) +
+    defensive_alliance +
+    democracy + 
+    asinh(gdp) +
+    asinh(pop) +
+    asinh(mindist) +
+    fpsim +
+    asinh(troops_ad) +
+    s(year) +
+    s(rid, bs = "re"),
+  data = dt,
+  family = quasipoisson
+) -> fit
+summary(fit)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+library(sjPlot)
+plot_model(
+  fit,
+  type = "pred",
+  terms = "exports",
+  color = "navy"
+) +
+  labs(
+    x = "Exports Bought from the U.S.",
+    y = "Foreign Aid",
+    title = "Predicted U.S. aid based on exports\nbought from the U.S.",
+    caption = logo
+  ) +
+  scale_x_continuous(
+    labels = ~ paste0("$",.x / 1e03, " bil")
+  ) +
+  scale_y_continuous(
+    labels = ~ paste0("$", .x/ 1e09, " bil")
+  ) +
+  my_theme()
+saveit(1)
+```
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+plot_model(
+  fit,
+  type = "pred",
+  terms = "democracy",
+  color = "navy"
+)  +
+  labs(
+    title = "Predicted U.S. aid based on\nrecipient regime type",
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = ~ paste0("$", .x / 1e06, " mil")
+  ) +
+  my_theme()
+saveit(2)
+```
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+plot_model(
+  fit,
+  type = "pred",
+  terms = "fpsim",
+  color = "navy"
+) +
+  labs(
+    title = "Predicted U.S. aid based on foreign\npolicy alignment with the U.S.",
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = ~ paste0("$", .x/ 1e09, " bil")
+  ) +
+  my_theme()
+saveit(3)
+```
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+plot_model(
+  fit,
+  type = "pred",
+  terms = "troops_ad",
+  color = "navy"
+) +
+  labs(
+    title = "Predicted U.S. aid based on troops\ndeployed in the recipient",
+    caption = logo
+  ) +
+  scale_x_continuous(
+    labels = scales::comma
+  ) +
+  scale_y_continuous(
+    labels = ~ paste0("$", .x/ 1e06, " mil")
+  ) +
+  my_theme()
+saveit(4)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+plot_model(
+  fit,
+  type = "pred",
+  terms = "defensive_alliance",
+  color = "navy"
+)  +
+  labs(
+    title = "Predicted U.S. aid based on\na shared defensive alliance",
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = ~ paste0("$", .x / 1e06, " mil")
+  ) +
+  my_theme()
+saveit(5)
+```
