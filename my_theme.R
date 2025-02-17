@@ -15,7 +15,15 @@ my_theme <- function() {
         linewidth = 0.1,
         color = "navy"
       ),
-      plot.caption = ggtext::element_markdown()
+      plot.caption = ggtext::element_markdown(),
+      axis.title.x = element_text(
+        hjust = .5,
+        size = 12
+      ),
+      axis.title.y = element_text(
+        hjust = .5,
+        size = 12
+      )
     ) 
 }
 

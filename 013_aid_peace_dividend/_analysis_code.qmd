@@ -1,0 +1,190 @@
+---
+title: "An Aid Peace Dividend?"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(mgcv)
+library(sjPlot)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "gray80",
+    "navy"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "013_aid_peace_dividend",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(peacesciencer)
+dt <- create_stateyears() |>
+  add_gml_mids() |>
+  add_sdp_gdp() |>
+  add_spells()
+source("http://tinyurl.com/aiddatadownloads")
+aid <- get_aiddata()
+aid |>
+  drop_na(ccode_d, ccode_r) |>
+  group_by(ccode_r, year) |>
+  summarize(
+    total_aid = sum(commitment_2011_constant),
+    us_aid = sum(commitment_2011_constant[ccode_d == 2])
+  ) |>
+  ungroup() |>
+  rename(ccode = ccode_r) -> aid
+
+dt |>
+  left_join(
+    aid
+  ) -> dt
+
+dt |>
+  filter(
+    year >= 1973,
+    year <= 2010,
+    ccode != 2
+  ) -> dt
+
+dt |>
+  mutate(
+    total_aid = replace_na(total_aid, 0),
+    us_aid = replace_na(us_aid, 0)
+  ) -> dt
+```
+
+## Figures
+
+```{r}
+fit <- glm(
+  gmlmidonset_init ~
+    log(total_aid + 1) + log(us_aid + 1) + wbgdp2011est + wbpopest +
+    poly(gmlmidinitspell, 3),
+  data = dt,
+  family = binomial
+)
+summary(fit)
+```
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(x = year, y = gmlmidonset_init) +
+  stat_summary(
+    geom = "line",
+    fun = mean,
+    linewidth = 1,
+    color = "navy"
+  ) +
+  my_theme() +
+  labs(
+    title = str_wrap(
+      "Yearly % rate of MID initiations (excluding the U.S.)",
+      width = 40
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = seq(1970, 2010, by = 5)
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  )
+saveit(1)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(x = year) +
+  stat_summary(
+    aes(y = total_aid, color = "Total Aid"),
+    geom = "line",
+    fun = ~ mean(.x, na.rm = T),
+    linewidth = 1
+  ) +
+  stat_summary(
+    aes(y = us_aid, color = "U.S. Aid"),
+    geom = "line",
+    fun = ~ mean(.x, na.rm = T),
+    linewidth = 1
+  ) +
+  ggpal("binary") +
+  my_theme() +
+  labs(
+    title = str_wrap(
+      "Average aid flows (2011 values) from donor countries to recipient countries",
+      width = 40
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = NULL
+  ) +
+  scale_x_continuous(
+    breaks = seq(1970, 2010, by = 5)
+  ) +
+  scale_y_continuous(
+    labels = ~ paste0("$", .x / 1e06, " mil")
+  )
+saveit(2)
+```
+
+```{r}
+#| fig-height: 3
+#| fig-width: 6
+modelplot(
+  fit,
+  coef_map = c(
+    "log(total_aid + 1)" = "Total Aid",
+    "log(us_aid + 1)" = "U.S. Aid"
+  ),
+  color = "navy"
+) +
+  my_theme() +
+  labs(
+    title = str_wrap(
+      "Model estimates for change in the likelihood of MID initiation",
+      width = 40
+    ),
+    x = "Change in log-odds\nwith 95% confidence intervals",
+    caption = logo
+  ) +
+  geom_vline(
+    xintercept = 0,
+    color = "orange3",
+    size = 1
+  )
+saveit(3)
+```
+
