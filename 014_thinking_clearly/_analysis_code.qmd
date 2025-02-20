@@ -1,0 +1,240 @@
+---
+title: "Correlation requires variation"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(mgcv)
+library(modelsummary)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "gray80",
+    "navy"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "014_thinking_clearly",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(troopdata)
+library(peacesciencer)
+data <- create_stateyears(
+  subset_years = 1970:2020
+) |> filter(ccode != 2) # drop the U.S.
+## get troops data
+troops <- get_troopdata()
+data |>
+  left_join(troops) -> data
+
+## deal with duplicates:
+data |>
+  group_by(ccode, year) |>
+  summarize(
+    troops = sum(troops_ad),
+    .groups = "drop"
+  ) -> data
+
+## global terrorism database
+terror <- read_csv(
+  here::here(
+    "_data",
+    "globalterrorismdb_0522dist.csv"
+  )
+)
+terror |>
+  group_by(country_txt, iyear) |>
+  summarize(
+    suicide = sum(suicide, na.rm = T),
+    .groups = "drop"
+  ) |>
+  transmute(
+    ccode = countrycode::countrycode(
+      country_txt,
+      "country.name",
+      "cown"
+    ),
+    year = iyear,
+    suicide
+  ) -> terror
+
+terror |>
+  group_by(ccode, year) |>
+  summarize(
+    suicide = sum(suicide),
+    .groups = "drop"
+  ) -> terror
+
+data |>
+  left_join(
+    terror
+  ) -> data
+
+data |>
+  mutate(
+    across(
+      everything(),
+      ~ replace_na(.x, 0)
+    )
+  ) -> data
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+data |>
+  filter(ccode == 700, year > 2001) |>
+  ggplot() +
+  aes(x = troops, y = suicide) +
+  geom_point(
+    color = "orange3"
+  ) +
+  geom_smooth(
+    method = "gam",
+    color = "navy"
+  ) +
+  my_theme() +
+  labs(
+    title = str_wrap(
+      "More U.S. troops in Afghanistan equals more suicide terrorism, 2002-2020",
+      width = 40
+    ),
+    caption = logo,
+    x = "U.S. Troops",
+    y = "Suicide Attacks"
+  ) +
+  scale_x_continuous(
+    labels = scales::comma
+  )
+saveit(1)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+data |>
+  filter(suicide > 0) |>
+  ggplot() +
+  aes(x = troops, y = suicide) +
+  geom_point(
+    color = "orange3"
+  ) +
+  geom_smooth(
+    method = "gam",
+    color = "navy"
+  ) +
+  my_theme() +
+  labs(
+    title = str_wrap(
+      "More U.S. troops equals more suicide terrorism across the world, 1970-2020",
+      width = 40
+    ),
+    subtitle = str_wrap(
+      "(Cases of no suicide terrorism excluded)"
+    ),
+    caption = logo,
+    x = "U.S. Troops",
+    y = "Suicide Attacks"
+  ) +
+  scale_x_continuous(
+    labels = scales::comma
+  )
+saveit(2)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+data |>
+  #filter(year > 2001) |>
+  ggplot() +
+  aes(x = troops, y = suicide) +
+  geom_point(
+    color = "orange3"
+  ) +
+  geom_smooth(
+    method = "gam",
+    color = "navy"
+  ) +
+  my_theme() +
+  labs(
+    title = str_wrap(
+      "More U.S. troops equals more suicide terrorism",
+      width = 40
+    ),
+    subtitle = str_wrap(
+      "(All cases included)"
+    ),
+    caption = logo,
+    x = "U.S. Troops",
+    y = "Suicide Attacks"
+  ) +
+  scale_x_continuous(
+    labels = scales::comma
+  )
+saveit(3)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+data |>
+  mutate(
+    any_troops = ifelse(
+      troops > 0,
+      "U.S. Troops",
+      "No U.S. Troops"
+    )
+  ) |>
+  filter(year >= 2002) |>
+  ggplot() +
+  aes(x = suicide, y = any_troops) +
+  stat_summary(
+    fun.data = mean_cl_boot,
+    color = "orange3"
+  ) +
+  my_theme() +
+  labs(
+    title = str_wrap(
+      "Average number of suicide terrorism attacks in countries without U.S. troops compared to those with U.S. troops, 2002-2020",
+      width = 35
+    ),
+    x = "Average # of attacks with 95% CIs",
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    panel.grid.major.y = element_blank()
+  )
+saveit(4)
+```
+
+
+
