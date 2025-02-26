@@ -1,0 +1,187 @@
+---
+title: "Shifting American Foreign Policy"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "gray80",
+    "navy",
+    "steelblue"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "016_shift_us_fp",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+data("unvoting", package = "qss")
+unvoting
+```
+
+## Figures
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+unvoting |>
+  filter(
+    CountryAbb == "USA"
+  ) |>
+  ggplot() +
+  aes(
+    x = Year,
+    y = PctAgreeRUSSIA
+  ) +
+  geom_line(
+    color = "navy"
+  ) +
+  geom_labelsmooth(
+    aes(
+      label = paste0(
+        "Avg. Agreement = ",
+        round(100 * mean(PctAgreeRUSSIA)),
+        "%"
+      )
+    ),
+    method = "lm",
+    formula = y ~ 1,
+    linewidth = 1,
+    color = "orange3"
+  ) +
+  my_theme() +
+  labs(
+    title = str_wrap(
+      "The U.S. tends not to agree with Russia in the United Nations General Assembly",
+      width = 35
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  ) +
+  scale_x_continuous(
+    breaks = seq(1950, 2010, by = 10)
+  )
+saveit(1)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+unvoting |>
+  filter(Year > 1990) |>
+  filter(CountryAbb != "RUS") |>
+  group_by(CountryName) |>
+  mean_ci(PctAgreeRUSSIA) |>
+  slice_max(mean, n = 10) |>
+  ggplot() +
+  aes(
+    x = mean,
+    xmin = lower,
+    xmax = upper,
+    y = reorder(CountryName, mean)
+  ) +
+  geom_pointrange(
+    color = "navy"
+  ) +
+  my_theme() +
+  labs(
+    title = str_wrap(
+      "Top 10 by % agreement with Russia since the end of the Cold War",
+      width = 35
+    ),
+    x = "% votes the same",
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    labels = scales::percent
+  ) +
+  theme(
+    panel.grid.major.y = element_line(
+      linetype = 2,
+      color = "orange3"
+    )
+  )
+saveit(2)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+unvoting |>
+  filter(Year > 1990) |>
+  filter(CountryAbb != "RUS",
+         CountryName != "South Sudan") |>
+  group_by(CountryName) |>
+  mean_ci(PctAgreeRUSSIA) |>
+  slice_min(mean, n = 10) |>
+  mutate(
+    CountryName = case_when(
+      CountryName == "United States of America" ~
+        "United States",
+      str_detect(CountryName, "Micro") ~
+        "Micronesia",
+      TRUE ~ CountryName
+    )
+  ) |>
+  ggplot() +
+  aes(
+    x = mean,
+    xmin = lower,
+    xmax = upper,
+    y = reorder(CountryName, mean)
+  ) +
+  geom_pointrange(
+    color = "navy"
+  ) +
+  my_theme() +
+  labs(
+    title = str_wrap(
+      "Bottom 10 by % agreement with Russia since the end of the Cold War",
+      width = 35
+    ),
+    x = "% votes the same",
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    labels = scales::percent
+  ) +
+  theme(
+    panel.grid.major.y = element_line(
+      linetype = 2,
+      color = "orange3"
+    )
+  )
+saveit(3)
+```
