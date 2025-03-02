@@ -1,0 +1,223 @@
+---
+title: "U.S. versus other country tariffs"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "gray80",
+    "navy",
+    "steelblue"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "017_us_vs_other_tariffs",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+## get the data
+library(wbstats)
+inds <- c(
+  "avg_man_tariff_all" = "TM.TAX.MANF.SM.AR.ZS",
+  "avg_man_tariff_mfn" = "TM.TAX.MANF.SM.FN.ZS"
+)
+dt <- wb_data(inds) |>
+  drop_na() |>
+  filter(date >= 1990)
+
+library(peacesciencer)
+ddy <- create_dyadyears(
+  subset_years = 1990:2015
+) |>
+  add_cow_trade()
+
+ddy <- ddy |>
+  filter(
+    ccode1 == 2
+  ) |>
+  transmute(
+    iso3c = countrycode::countrycode(
+      ccode2, "cown", "iso3c"
+    ),
+    date = year,
+    imports = flow1,
+    exports = flow2
+  )
+
+## join
+dt <- left_join(dt, ddy)
+```
+
+## Figures
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(
+    x = date,
+    y = avg_man_tariff_all,
+    group = country
+  ) +
+  geom_line(
+    linewidth = .1,
+    color = "orange3"
+  ) +
+  geom_labelline(
+    data = . %>%
+      filter(iso2c == "US"),
+    label = "United States",
+    linewidth = 1,
+    color = "navy"
+  ) +
+  my_theme() +
+  labs(
+    title = str_wrap(
+      "U.S. tariffs are far lower than many other countries, 1990-2022",
+      width = 37
+    ),
+    x = NULL,
+    y = NULL,
+    subtitle = str_wrap(
+      "Avgerage % tariff on all manufactured goods. Data is from the World Bank.",
+      width = 50
+    ),
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = ~ scales::percent(.x / 100)
+  )
+saveit(1)
+```
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(dt |> filter(iso2c != "US")) +
+  aes(
+    x = date,
+    y = avg_man_tariff_all
+  ) +
+  geom_labelsmooth(
+    method = "gam",
+    method.args = list(family = quasipoisson),
+    linewidth = 1,
+    label = "Unweighted Avg.",
+    color = "navy",
+    hjust = 0
+  ) +
+  geom_labelsmooth(
+    aes(weight = export_sum),
+    method = "gam",
+    method.args = list(family = quasipoisson),
+    linewidth = 1,
+    label = "Weighted by U.S. Exports",
+    color = "orange3",
+    hjust = .4
+  ) +
+  geom_labelsmooth(
+    data = dt |> filter(iso2c == "US"),
+    method = "gam",
+    method.args = list(family = quasipoisson),
+    linewidth = 1,
+    label = "United States",
+    color = "steelblue",
+    hjust = .1
+  ) +
+  my_theme() +
+  labs(
+    title = str_wrap(
+      "Countries that buy more goods from the U.S. improved their tariff rate to keep up with the U.S.",
+      width = 37
+    ),
+    x = NULL,
+    y = NULL,
+    subtitle = str_wrap(
+      "Avgerage % tariff on all manufactured goods. Data is from the World Bank.",
+      width = 50
+    ),
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = ~ scales::percent(.x / 100)
+  )
+saveit(2)
+```
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+library(sjPlot)
+library(mgcv)
+
+fit <- gam(
+  avg_man_tariff_all ~ 
+    log(imports) +
+    s(cnum, bs = "re"),
+  data = dt |>
+    filter(imports > 0) |>
+    drop_na() |>
+    mutate(
+      cnum = iso3c |>
+        as.factor() |>
+        as.numeric()
+    )
+)
+summary(fit)
+plot_model(
+  fit,
+  type = "pred",
+  terms = "imports",
+  color = "navy"
+) +
+  my_theme() +
+  labs(
+    title = str_wrap(
+      "Buying U.S. imports predicts lower tariffs, 1990-2014",
+      width = 37
+    ),
+    x = "Imports in Billions",
+    y = "% Tarrifs",
+    caption = logo,
+    subtitle = str_wrap(
+      "Linear model fit using random country intercepts and log transformation on exports.",
+      width = 50
+    )
+  ) +
+  scale_x_log10(
+    labels = ~ scales::dollar(.x / 1e03)
+  ) +
+  scale_y_continuous(
+    labels = ~ scales::percent(.x / 100)
+  )
+saveit(3)
+```
+
