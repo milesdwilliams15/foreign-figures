@@ -1,0 +1,250 @@
+---
+title: "US military aid at home"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "gray80",
+    "navy",
+    "steelblue"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "018_us_mil_aid_at_home",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+## Read in aid data ----
+read_csv(
+  here::here(
+    "_data",
+    "us_foreign_aid_country.csv"
+  )
+) -> aiddt
+
+## Read in order data ----
+library(peacesciencer)
+source(
+  here::here(
+    "_helpers",
+    "add_int_order.R"
+  )
+)
+
+create_dyadyears() |>
+  add_int_order() -> orddt
+
+## Merge the data and clean ----
+aiddt |>
+  janitor::clean_names() |>
+  transmute(
+    ccode1 = 2,
+    ccode2 = countrycode::countrycode(
+      country_code, "iso3c", "cown"
+    ),
+    year = as.numeric(fiscal_year) |> round(),
+    aid = constant_amount
+  ) |>
+  group_by(ccode1, ccode2, year) |>
+  summarize(
+    aid = sum(aid, na.rm = T)
+  ) |>
+  ungroup() |>
+  drop_na() -> aiddt
+
+orddt |>
+  filter(ccode1 == 2) |>
+  filter(
+    year %in% unique(aiddt$year)
+  ) |>
+  left_join(aiddt) |>
+  mutate(
+    aid = replace_na(aid, 0)
+  ) -> dt
+
+dt <- dt |>
+  select(ccode1, ccode2, year, aid, order:beyondorders) |>
+  filter(year < 2023)
+
+## Bring in mid init data ----
+create_stateyears(subset_years = 1946:2010) |>
+  filter(ccode != 2) |>
+  add_gml_mids() |>
+  add_spells() |>
+  add_sdp_gdp() -> middt
+
+dt <- dt |>
+  left_join(
+    middt |> transmute(ccode2 = ccode, year, 
+                       mid = gmlmidonset_init, 
+                       spell = gmlmidspell,
+                       gdp = wbgdp2011est,
+                       pop = wbpopest)
+  )
+```
+
+## Figures
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  group_by(year) |>
+  summarize(
+    order = mean(order)
+  ) |>
+  ggplot() +
+  aes(year, order) +
+  geom_point(color = "orange3") +
+  stat_smooth(
+    method = "gam",
+    method.args = list(family = quasipoisson),
+    se = F,
+    color = "navy"
+  ) +
+  my_theme() +
+  labs(
+    title = str_wrap(
+      "Share of countries in the US-led Liberal International Order, 1946-2022",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Order data based on Braumoeller (2019)"
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = seq(1950, 2020, by = 10)
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  )
+saveit(1)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+source(
+  here::here(
+    "_helpers",
+    "my_mean_ci.R"
+  )
+)
+ggplot(dt) +
+  aes(
+    x = year,
+    y = aid,
+    color = ifelse(
+      order == 1,
+      "Yes",
+      "No"
+    )
+  ) +
+  stat_smooth(
+    level = .834
+  ) +
+  scale_x_continuous(
+    breaks = seq(1950, 2020, by = 10)
+  ) +
+  scale_y_log10(
+    labels = ~ scales::dollar(.x / 1e06)
+  ) +
+  my_theme() +
+  labs(
+    title = str_wrap(
+      "Average aid to countries in and outside of the Liberal International Order, 1945-2022",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Aid is in millions of 2024 constant $ and shown in the log-10 scale",
+      width = 50
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = "Liberal Order"
+  ) +
+  ggpal("binary") 
+saveit(2)
+```
+
+```{r}
+library(mgcv)
+library(sjPlot)
+fit <- gam(
+  mid ~ log(aid) * order +
+    gdp + pop +
+    poly(spell, 3) +
+    s(ccode2, bs = "re"),
+  data = dt |>
+    mutate(aid = ifelse(aid > 0, aid, 1),
+           order = ifelse(order == 1, "Yes", "No") |>
+             as.factor()) |>
+    filter(year <= 2010),
+  family = binomial
+)
+
+plot_model(
+  fit,
+  type = "pred",
+  terms = c("aid", "order"),
+  ci.lvl = .834
+) +
+  ggpal("binary") +
+  ggpal("binary", "fill") +
+  labs(
+    title = str_wrap(
+      "% chance of MID initiation predicted by US aid",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Logit predictions controlling for GDP/capita, population, peace spells, and random country intercepts",
+      width = 50
+    ),
+    x = "Aid in millions of $",
+    y = NULL,
+    caption = logo,
+    color = "Liberal Order"
+  ) +
+  my_theme() +
+  theme(
+    legend.position = "right",
+    legend.direction = "vertical"
+  ) +
+  scale_x_log10() +
+  scale_y_continuous(
+    labels = scales::percent
+  )
+saveit(3)
+```
+
