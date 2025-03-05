@@ -1,5 +1,5 @@
 ---
-title: "US military aid at home"
+title: "US aid and order"
 format: html
 ---
 
@@ -176,17 +176,17 @@ ggplot(dt) +
   scale_x_continuous(
     breaks = seq(1950, 2020, by = 10)
   ) +
-  scale_y_log10(
-    labels = ~ scales::dollar(.x / 1e06)
+  scale_y_continuous(
+    labels = ~ scales::dollar(.x / 1e09)
   ) +
   my_theme() +
   labs(
     title = str_wrap(
-      "Average aid to countries in and outside of the Liberal International Order, 1945-2022",
+      "Average aid to countries in and outside of the WLIO, 1945-2022",
       width = 37
     ),
     subtitle = str_wrap(
-      "Aid is in millions of 2024 constant $ and shown in the log-10 scale",
+      "Aid is in billions of 2024 constant $",
       width = 50
     ),
     x = NULL,
@@ -208,7 +208,7 @@ fit <- gam(
     s(ccode2, bs = "re"),
   data = dt |>
     mutate(aid = ifelse(aid > 0, aid, 1),
-           order = ifelse(order == 1, "Yes", "No") |>
+           order = ifelse(order == 1, "Liberal Order", "Outside Order") |>
              as.factor()) |>
     filter(year <= 2010),
   family = binomial
@@ -229,17 +229,22 @@ plot_model(
     ),
     subtitle = str_wrap(
       "Logit predictions controlling for GDP/capita, population, peace spells, and random country intercepts",
-      width = 50
+      width = 60
     ),
-    x = "Aid in millions of $",
+    x = "U.S. Aid",
     y = NULL,
     caption = logo,
-    color = "Liberal Order"
+    color = NULL
   ) +
   my_theme() +
   theme(
-    legend.position = "right",
-    legend.direction = "vertical"
+    legend.position = c(.5, .8),
+    legend.direction = "vertical",
+    legend.background = element_rect(
+      color = "navy",
+      linetype = 1,
+      linewidth = .5
+    )
   ) +
   scale_x_log10() +
   scale_y_continuous(
