@@ -1,0 +1,271 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "gray80",
+    "navy",
+    "steelblue"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "019_nav_by_judge",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+## read in W&M data
+wm <- read_csv(
+  here::here(
+    "_data",
+    "wm_donor_eval_survey.csv"
+  )
+)
+
+## read in honig data
+dh <- read_csv(
+  here::here(
+    "_data",
+    "honig_io_ido_autonomy.csv"
+  )
+)
+
+## can I get these to align?
+wm |>
+  mutate(
+    ccode = countrycode::countrycode(
+      org_name,
+      "country.name",
+      "cown"
+    )
+  ) -> wm
+
+# worked!
+# wm |> select(org_name, ccode) |> view()
+
+## try with honig data
+dh |>
+  mutate(
+    ccode = countrycode::countrycode(
+      ido,
+      "country.name",
+      "cown"
+    )
+  ) -> dh
+
+## also worked!
+# dh |> select(ido, ccode) |> view()
+
+## make a merged version of the data
+inner_join(
+  wm |>
+    drop_na() |>
+    group_by(ccode) |>
+    summarize(
+      helpful = sum(
+        helpfulness_weighted * 
+          helpfulness_n
+      ) / sum(helpfulness_n),
+      influence = sum(
+        influence_weighted *
+          influence_n
+      ) / sum(influence_n)
+    ),
+  dh |>
+    drop_na() |>
+    select(ccode, aut_score, rank)
+) -> cd
+```
+
+## Figures
+
+```{r}
+#| fig-height: 12
+#| fig-width: 6
+
+wm |>
+  slice_max(helpfulness_weighted, n = 20) |> 
+  ggplot() +
+  aes(
+    x = helpfulness_weighted,
+    y = reorder(
+      str_wrap(org_name, width = 20), 
+      helpfulness_weighted
+    )
+  ) +
+  geom_col(
+    aes(
+      fill = ifelse(
+        ccode == 2, "US", "not"
+      ) |> replace_na("not")
+    )
+  ) +
+  geom_text(
+    aes(
+      color = ifelse(
+        ccode == 2, "not", "US"
+      ) |> replace_na("US"),
+      label = scales::percent(
+        round(100 * helpfulness_weighted, 1) / 100
+      )
+    ),
+    hjust = 1.2,
+    family = "mono"
+  ) +
+  ggpal("binary", "fill") +
+  ggpal("binary") +
+  my_theme() +
+  theme(
+    legend.position = "",
+    panel.grid.major = element_blank()
+  ) +
+  labs(
+    title = str_wrap(
+      "Top 20 most helpful donor agencies",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data: AidData 2020 Listening to Leaders Survey",
+      width = 50
+    ),
+    caption = logo,
+    x = "% Reporting Helpful",
+    y = NULL
+  ) +
+  scale_x_continuous(
+    breaks = NULL
+  )
+saveit(1, 12, 6)
+```
+
+```{r}
+#| fig-height: 12
+#| fig-width: 6
+
+ggplot(dh) +
+  aes(
+    x = aut_score,
+    y = reorder(
+      ido,
+      aut_score
+    )
+  ) +
+  geom_col(
+    aes(
+      fill = ifelse(
+        ccode == 2,
+        "US", "not"
+      ) |> replace_na("not")
+    )
+  ) +
+  geom_text(
+    aes(
+      color = ifelse(
+        ccode == 2,
+        "not", "US"
+      ) |> replace_na("US"),
+      label = round(aut_score, 2)
+    ),
+    hjust = 1.2,
+    family = "mono"
+  ) +
+  my_theme() +
+  theme(
+    legend.position = "",
+    panel.grid.major = element_blank()
+  ) +
+  scale_x_continuous(
+    breaks = NULL
+  ) +
+  labs(
+    title = str_wrap(
+      "Local agent autonomy scores",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data: Honig (2019)"
+    ),
+    caption = logo,
+    x = "Autonomy Score (0-1 index)",
+    y = NULL
+  ) +
+  ggpal("binary") +
+  ggpal("binary", "fill")
+saveit(2, 12, 6)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(cd) +
+  aes(
+    x = aut_score,
+    y = helpful,
+    color = ifelse(
+        ccode == 2,
+        "United States",
+        "not"
+      )
+  ) +
+  geom_point() +
+  geom_text(
+    data = . %>% filter(ccode == 2),
+    aes(
+      label = "United States"
+    ),
+    hjust = -.1,
+    vjust = 1.1,
+    family = "mono"
+  ) +
+  geom_smooth(
+    method = "lm",
+    se = F,
+    color = "navy"
+  ) +
+  my_theme() +
+  labs(
+    title = str_wrap(
+      "Correlation between agent autonomy and perceived helpfulness",
+      width = 37
+    ),
+    subtitle = "Data: 2020 Listening to Leaders + Honig (2019)",
+    caption = logo,
+    x = "Agent Autonomy Score",
+    y = "% Rated Helpful"
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  ) +
+  theme(
+    legend.position = ""
+  ) +
+  ggpal("binary")
+saveit(3)
+```
+
