@@ -1,0 +1,339 @@
+---
+title: "Reserve Currencies"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "gray80",
+    "navy",
+    "steelblue"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "020_reserve_currencies",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+
+```{r}
+## These are in excel spreadsheets
+library(readxl)
+
+world_dt <- read_excel(
+  here::here(
+    "_data",
+    "imf_currency_researves_world.xlsx"
+  )
+)
+adv_econ_dt <- read_excel(
+  here::here(
+    "_data",
+    "imf_currency_researves_adv_econ.xlsx"
+  )
+)
+dev_econ_dt <- read_excel(
+  here::here(
+    "_data",
+    "imf_currency_researves_dev_econ.xlsx"
+  )
+)
+```
+
+Clean these up:
+
+```{r}
+world_dt |>
+  pivot_longer(- ...1) |>
+  filter(!is.na(value)) |>
+  transmute(
+    currency = ...1,
+    year = as.numeric(name),
+    amount = value
+  ) -> world_dt
+adv_econ_dt |>
+  pivot_longer(- ...1) |>
+  filter(!is.na(value)) |>
+  transmute(
+    currency = ...1,
+    year = as.numeric(name),
+    amount = value
+  ) -> adv_econ_dt
+dev_econ_dt |>
+  pivot_longer(- ...1) |>
+  filter(!is.na(value)) |>
+  transmute(
+    currency = ...1,
+    year = as.numeric(name),
+    amount = value
+  ) -> dev_econ_dt
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 6
+#| fig-width: 6
+
+ggplot(world_dt) +
+  aes(
+    x = year,
+    y = amount,
+    color = str_detect(
+        currency, "U.S."
+      )
+  ) +
+  geom_line(
+    aes(
+      group = currency
+    ),
+    show.legend = F
+  ) +
+  ggrepel::geom_text_repel(
+    data = . %>% 
+      filter(year == 2023) %>%
+      slice_max(
+        amount, n = 3
+      ),
+    aes(
+      label = currency |>
+        str_remove_all("Claims in ")
+    ),
+    nudge_x = 0,
+    nudge_y = 1e06,
+    show.legend = F,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  my_theme() +
+  ggpal("binary") +
+  scale_y_continuous(
+    labels = ~ paste0(
+      .x / 1e06, " quadrillion"
+    )
+  ) +
+  labs(
+    title = str_wrap(
+      "Units of currencies in reserve for the world, 2000-2023",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data: IMF COFER system; allocated reserves shown based on anonymous reporting by 149 monetary authorities of IMF and non-IMF countries.",
+      width = 50
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    panel.grid.major.x = element_blank()
+  )
+saveit(1, 6, 6)
+```
+
+```{r}
+#| fig-height: 6
+#| fig-width: 6
+
+ggplot(adv_econ_dt) +
+  aes(
+    x = year,
+    y = amount,
+    color = str_detect(
+        currency, "U.S."
+      )
+  ) +
+  geom_line(
+    aes(
+      group = currency
+    ),
+    show.legend = F
+  ) +
+  ggrepel::geom_text_repel(
+    data = . %>% 
+      filter(year == 2014) %>%
+      slice_max(
+        amount, n = 3
+      ),
+    aes(
+      label = currency |>
+        str_remove_all("Claims in ")
+    ),
+    nudge_x = 0,
+    nudge_y = 1e05,
+    show.legend = F,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  my_theme() +
+  ggpal("binary") +
+  scale_y_continuous(
+    labels = ~ paste0(
+      .x / 1e06, " mil"
+    )
+  ) +
+  labs(
+    title = str_wrap(
+      "Units of currencies in reserve for advanced economies, 2020-2014",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data: IMF COFER system; allocated reserves shown based on anonymous reporting by 149 monetary authorities of IMF and non-IMF countries.",
+      width = 50
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    panel.grid.major.x = element_blank()
+  )
+saveit(2, 6, 6)
+```
+
+```{r}
+#| fig-height: 6
+#| fig-width: 6
+
+ggplot(dev_econ_dt) +
+  aes(
+    x = year,
+    y = amount,
+    color = str_detect(
+        currency, "U.S."
+      )
+  ) +
+  geom_line(
+    aes(
+      group = currency
+    ),
+    show.legend = F
+  ) +
+  ggrepel::geom_text_repel(
+    data = . %>% 
+      filter(year == 2014) %>%
+      slice_max(
+        amount, n = 3
+      ),
+    aes(
+      label = currency |>
+        str_remove_all("Claims in ")
+    ),
+    nudge_x = 0,
+    nudge_y = 1e05,
+    show.legend = F,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  my_theme() +
+  ggpal("binary") +
+  scale_y_continuous(
+    labels = ~ paste0(
+      .x / 1e06, " mil"
+    )
+  ) +
+  labs(
+    title = str_wrap(
+      "Units of currencies in reserve for developing economies, 2020-2014",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data: IMF COFER system; allocated reserves shown based on anonymous reporting by 149 monetary authorities of IMF and non-IMF countries.",
+      width = 50
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    panel.grid.major.x = element_blank()
+  )
+saveit(3, 6, 6)
+```
+
+```{r}
+#| fig-height: 6
+#| fig-width: 6
+
+world_dt |>
+  group_by(year) |>
+  mutate(
+    percent = amount / sum(amount)
+  ) |>
+  ggplot() +
+  aes(
+    x = year,
+    y = percent,
+    color = str_detect(
+        currency, "U.S."
+      )
+  ) +
+  geom_line(
+    aes(
+      group = currency
+    ),
+    show.legend = F
+  ) +
+  ggrepel::geom_text_repel(
+    data = . %>% 
+      filter(year == 2023) %>%
+      slice_max(
+        amount, n = 3
+      ),
+    aes(
+      label = currency |>
+        str_remove_all("Claims in ")
+    ),
+    nudge_x = 0,
+    nudge_y = .1,
+    show.legend = F,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  my_theme() +
+  ggpal("binary") +
+  scale_y_continuous(
+    labels = scales::percent
+  ) +
+  labs(
+    title = str_wrap(
+      "Share (%) of currencies in reserve for the world, 2000-2023",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data: IMF COFER system; allocated reserves shown based on anonymous reporting by 149 monetary authorities of IMF and non-IMF countries.",
+      width = 50
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    panel.grid.major.x = element_blank()
+  )
+saveit(4, 6, 6)
+```
