@@ -1,0 +1,149 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "gray80",
+    "steelblue"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "022_tariff_bargains",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 3
+#| fig-width: 6
+
+lab <- c("Side B\nWar Payoff", "Cost\nof War",
+          "Side A\nWar Payoff")
+
+tibble(
+  pct = c(0.2, 0.1, 0.7),
+  lab = factor(lab, lab)
+) |>
+  ggplot() +
+  aes(pct, "a", fill = lab) +
+  geom_col() +
+  ggpal(aes = "fill") +
+  my_theme() +
+  guides(
+    fill = guide_legend(reverse = T)
+  ) +
+  labs(
+    title = str_wrap(
+      "Example payoffs in the conventional bargaining model of war",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "The cost of war generates a bargaining range that offers better outcomes for both sides relative to war",
+      width = 55
+    ),
+    fill = NULL,
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = .75,
+    labels = c("Bargaining\nRange")
+  ) +
+  scale_y_discrete(
+    breaks = NULL
+  ) +
+  geom_vline(
+    xintercept = c(.7, .8),
+    linewidth = 1
+  ) +
+  theme(
+    panel.grid.major = element_blank()
+  )
+saveit(1, 3)
+```
+
+```{r}
+#| fig-height: 3
+#| fig-width: 6
+
+lab <- c("Side B\nWar Payoff", "Cost\nof War",
+          "Side A\nWar Payoff")
+
+tibble(
+  pct = c(0.2, 0.1, 0.7),
+  lab = factor(lab, lab)
+) |>
+  ggplot() +
+  aes(pct, "a", fill = lab) +
+  geom_col() +
+  ggpal(aes = "fill") +
+  my_theme() +
+  guides(
+    fill = guide_legend(reverse = T)
+  ) +
+  labs(
+    title = str_wrap(
+      "Example payoffs with unchecked leader interests bargaining model of war",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "It is possible for a leader with unchecked interests to on net benefit from war while society loses",
+      width = 55
+    ),
+    fill = NULL,
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = .9,
+    labels = c("Leader's War\nPayoff")
+  ) +
+  scale_y_discrete(
+    breaks = NULL
+  ) +
+  geom_vline(
+    xintercept = c(.7, .8),
+    linewidth = 1
+  ) +
+  geom_vline(
+    xintercept = 0.9,
+    linewidth = 1,
+    color = "steelblue"
+  ) +
+  geom_col(
+    aes(x = .9),
+    fill = "steelblue",
+    alpha = .3,
+    position = "identity"
+  ) +
+  theme(
+    panel.grid.major = element_blank()
+  ) 
+saveit(2, 3)
+```
