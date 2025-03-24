@@ -1,0 +1,192 @@
+---
+title: "Dissatisfaction"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "gray80",
+    "navy",
+    "steelblue"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "023_dissatisfaction",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+dt <- read_rds(
+  here::here(
+    "_data",
+    "kent_dissatisfaction.rds"
+  )
+)
+```
+
+## Figures
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+ggplot(dt) +
+  aes(year, log(expectations / benefits), group = stateabb) +
+  geom_line(
+    color = "orange3",
+    linewidth = .5,
+    alpha = .5
+  ) +
+  geom_line(
+    data = . %>% 
+      filter(stateabb == "USA"),
+    color = "navy",
+    linewidth = 1
+  ) +
+  ggrepel::geom_text_repel(
+    data = . %>%
+      filter(stateabb == "USA",
+             year == 1900),
+    aes(label = "United States"),
+    color = "navy",
+    nudge_x = 2,
+    nudge_y = 3,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  my_theme() +
+  labs(
+    title = str_wrap(
+      "Country dissatisfaction with the international status quo",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Positive values indicate disstatisfaction. Negative indicate satisfaction. U.S. values are shown in blue.",
+      width = 50
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = seq(1820, 2010, by = 10)
+  ) +
+  theme(
+    panel.grid.major.x = element_blank(),
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1
+    )
+  )
+saveit(1)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  filter(stateabb == "USA") |>
+  pivot_longer(
+    cols = c(benefits, expectations)
+  ) |>
+  ggplot() +
+  aes(year, value, color = name) +
+  geom_point(
+    alpha = .4
+  ) +
+  geom_labelsmooth(
+    aes(label = name),
+    family = "mono",
+    fontface = "bold",
+    linewidth = 1,
+    method = "gam",
+    method.args = list(family = quasibinomial)
+  ) +
+  my_theme() +
+  labs(
+    title = str_wrap(
+      "Declining expectations are driving down the United States' dissatisfaction score",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "U.S. expectations for centrality in trade, diplomacy, alliance, and arms trade networks relative to its actual centrality.",
+      width = 50
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = seq(1820, 2010, by = 10)
+  ) +
+  theme(
+    panel.grid.major.x = element_blank(),
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1
+    ),
+    legend.position = ""
+  ) +
+  ggpal("binary")
+saveit(2)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+library(sjPlot)
+glm(
+  number_onset ~ dissatisfaction +
+    polity +
+    idealpoint +
+    log(tpop) +
+    stateabb,
+  data = dt,
+  family = quasipoisson
+) |> 
+  plot_model(
+    type = "pred",
+    terms = "dissatisfaction",
+    color = "navy"
+  ) +
+  my_theme() +
+  labs(
+    title = str_wrap(
+      "Predicted number of initiated international disputes",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Simulated predictions controlling for country size, polity score, and ideal point. The model includes country fixed effects.",
+      width = 50
+    ),
+    x = "Dissatisfaction",
+    y = NULL,
+    caption = logo
+  )
+saveit(3)
+```
+
