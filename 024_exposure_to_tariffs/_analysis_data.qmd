@@ -1,0 +1,298 @@
+---
+title: "Is Trump overplaying his hand on tariffs?"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "gray80",
+    "navy",
+    "steelblue"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("skyblue1", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "024_exposure_to_tariffs",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+## first create a dyad-year dataset of trade
+library(peacesciencer)
+create_dyadyears() |>
+  add_cow_trade() |>
+  add_sdp_gdp() |>
+  drop_na() -> dt
+
+## next, aggregate to the country-year 
+dt |>
+  group_by(ccode1, year) |>
+  summarize(
+    trade = sum(flow1 + flow2),
+    imports = sum(flow1),
+    exports = sum(flow2),
+    usimports = sum(flow1[ccode2 == 2], na.rm = T),
+    usexports = sum(flow2[ccode2 == 2], na.rm = T),
+    gdp = round(unique(exp(wbgdp2011est1))/1e06),
+    pop = round(unique(exp(wbpopest1))/1e06)
+  ) -> dt
+
+## convert trade to 2011 current dollars
+library(priceR)
+inf_dt <- retrieve_inflation_data("US")
+cty_dt <- show_countries()
+dt |>
+  ungroup() |>
+  mutate(
+    across(
+      trade:usexports,
+      ~ adjust_for_inflation(
+        .x, year, "US", 2011,
+        inflation_dataframe = inf_dt,
+        countries_dataframe = cty_dt
+      )
+    )
+  ) -> dt
+
+## round again to save space
+dt |>
+  mutate(
+    across(
+      trade:usexports,
+      round
+    )
+  ) -> dt
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(year, trade / gdp) +
+  geom_textsmooth(
+    label = "World Average",
+    color = "orange3",
+    linewidth = 1,
+    method = "gam"
+  ) +
+  geom_textsmooth(
+    data = . %>% filter(ccode1 == 2),
+    label = "United States",
+    color = "navy",
+    linewidth = 1,
+    method = "gam"
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  ) +
+  labs(
+    title = str_wrap(
+      "Total trade per GDP, 1870-2014",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Smoothed trend calculating using a generalized additive model. Data accessed using the {peacesciencer} R package.",
+      width = 60
+    ),
+    x = NULL,
+    y = "% GDP",
+    caption = logo
+  )
+saveit(1)
+```
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  mutate(
+    ustrade = usimports + usexports
+  ) |>
+  pivot_longer(
+    c(trade, gdp)
+  ) |>
+  mutate(
+    name = ifelse(
+      name == "trade",
+      "Rate per Total Trade",
+      "Rate per GDP"
+    )
+  ) |>
+  filter(ccode1 != 2) |>
+  ggplot() +
+  aes(year, ustrade / value, color = name) +
+  geom_textsmooth(
+    aes(label = name),
+    linewidth = 1,
+    show.legend = F
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  ) +
+  labs(
+    title = str_wrap(
+      "Trade with the U.S. per total trade and GDP, 1870-2014",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Smoothed average estimated with a generalized additive model. Data accessed using the {peacesciencer} R package.",
+      width = 60
+    ),
+    x = NULL,
+    y = "% Rate",
+    caption = logo
+  ) +
+  ggpal("binary")
+saveit(2)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  filter(year == 2014) |>
+  mutate(ustrade = usimports + usexports) |>
+  slice_max(ustrade, n = 5) |>
+  mutate(country = countrycode::countrycode(ccode1, "cown", "country.name")) |>
+  ggplot() +
+  aes(x = ustrade, y = reorder(country, ustrade)) +
+  geom_col(
+    fill = "orange3"
+  ) +
+  geom_text(
+    aes(label = paste0("$", round(ustrade / 1e03, 1), " bil")),
+    hjust = -0.1,
+    color = "navy",
+    family = "mono"
+  ) +
+  scale_x_continuous(
+    breaks = NULL,
+    limits = c(0, 8e05)
+  ) +
+  theme(
+    panel.grid.major = element_blank()
+  ) +
+  labs(
+    title = str_wrap(
+      "Top 5 U.S. trade partners in 2014",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Total trade with the U.S. in billions of 2011 constant dollars. Data accessed using the {peacesceincer} R package.",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(3)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  filter(year == 2014) |>
+  mutate(ustrade = usimports + usexports,
+         ustrade = ustrade / gdp) |>
+  slice_max(ustrade, n = 5) |>
+  mutate(country = countrycode::countrycode(ccode1, "cown", "country.name")) |>
+  ggplot() +
+  aes(x = ustrade, y = reorder(country, ustrade)) +
+  geom_col(
+    fill = "orange3"
+  ) +
+  geom_text(
+    aes(label = scales::percent(ustrade)),
+    hjust = -0.1,
+    color = "navy",
+    family = "mono"
+  ) +
+  scale_x_continuous(
+    breaks = NULL,
+    limits = c(0, .5)
+  ) +
+  theme(
+    panel.grid.major = element_blank()
+  ) +
+  labs(
+    title = str_wrap(
+      "Top 5 U.S. trade partners in 2014",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Total trade with the U.S. per country GDP. Data accessed using the {peacesceincer} R package.",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(4)
+```
+
+
+```{r}
+dt |>
+  filter(year == 2014, ccode1 != 2) |>
+  mutate(ustrade = usimports + usexports) |>
+  ggplot() +
+  aes(gdp, ustrade / gdp) +
+  geom_point(
+    color = "orange3",
+    size = 2,
+    alpha = 0.3
+  ) +
+  scale_x_continuous(
+    labels = ~ paste0("$", .x / 1e06, " tril")
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  ) +
+  labs(
+    title = str_wrap(
+      "U.S. leverage is highest among the world's smallest economies",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data for 2014. GDP is in 2011 constant dollars. Data accessed using the {peacesciencer} R package",
+      width = 55
+    ),
+    x = "GDP",
+    y = "% Trade/GDP\n(Leverage)",
+    caption = logo
+  )
+saveit(5)
+```
+
