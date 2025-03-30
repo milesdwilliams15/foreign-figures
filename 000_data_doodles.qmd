@@ -34,6 +34,84 @@ saveit <- function(file, ht = 4, wd = 6) {
 }
 ```
 
+## U.S. trade leverage over Canada
+
+Get some data:
+
+```{r}
+library(peacesciencer)
+create_dyadyears() |>
+  add_cow_trade() |>
+  add_sdp_gdp() -> dt
+
+## whittle down to Canada bilateral trade in 2014
+dt |>
+  filter(ccode1 == 20, year == 2014) |>
+  drop_na() -> dt
+
+## Clean up the data a bit
+dt |>
+  transmute(
+    partner = countrycode::countrycode(
+      ccode2, "cown", "country.name"
+    ),
+    trade = flow1 + flow2,
+    gdp = exp(wbgdp2011est1) / 1e06
+  ) -> dt
+
+## adjust gdp for inflation
+library(priceR)
+inf_dt <- retrieve_inflation_data("US")
+cty_dt <- show_countries()
+
+dt |>
+  mutate(
+    gdp2014 = adjust_for_inflation(
+        gdp, 2011, "US", 2014,
+        inflation_dataframe = inf_dt,
+        countries_dataframe = cty_dt
+      ) |> round()
+  ) -> dt
+```
+
+Make a data viz:
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  mutate(
+    leverage = trade / gdp2014
+  ) |>
+  slice_max(leverage, n = 5) |>
+  ggplot() +
+  aes(x = leverage, y = reorder(partner, leverage)) +
+  geom_col(
+    fill = "navy"
+  ) +
+  my_theme() +
+  labs(
+    title = str_wrap(
+      "Canada's top trading partners per GDP",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data accessed with the {peacesciencer} R package. Values shown for 2014.",
+      width = 50
+    ),
+    x = "Trade per GDP (%)",
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = seq(0, .4, by = .05),
+    labels = scales::percent
+  )
+saveit("leverage_over_canada.png")
+```
+
+
 ## U.S. military aid vs foreign aid
 
 ```{r}
