@@ -252,12 +252,19 @@ saveit(3, 5)
 GDP growth per gov't expenditure growth.
 
 ```{r}
+pdiff <- function(x1, x0) {
+  (x1 - x0) / x1
+}
 dt |>
   mutate(
-    ydiff = y - lag(y, order_by = year),
-    gdiff = g - lag(g, order_by = year),
-    rat = ydiff / gdiff
+    ydiff = pdiff(
+      y, lag(y, order_by = year)
+    ),
+    gdiff = pdiff(
+      y - g, lag(y - g, order_by = year)
+    ),
+    rat = ydiff - gdiff
   ) |>
-  lm(ydiff ~ gdiff, data = _)
+  mean_ci(rat)
 ```
 
