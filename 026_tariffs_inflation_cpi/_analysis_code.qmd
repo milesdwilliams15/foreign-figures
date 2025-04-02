@@ -1,0 +1,207 @@
+---
+title: "Tariffs, inflation, and CPI"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "red3",
+    "navy",
+    "steelblue"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("skyblue1", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "026_tariffs_inflation_cpi",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+First, read in some tariff data for the U.S. from the World Bank.
+
+```{r}
+library(wbstats)
+ind <- c("tariff" = "TM.TAX.MRCH.WM.AR.ZS")
+wbdt <- wb_data(ind, "USA")
+
+## clean it up
+wbdt |>
+  drop_na(tariff) |>
+  transmute(
+    iso3c,
+    year = date,
+    tariff
+  ) -> wbdt
+```
+
+Read in the GMD dataset.
+
+```{r}
+gmddt <- read_csv(
+  here::here("_data","GMD.csv")
+)
+
+## clean up
+gmddt |>
+  filter(
+    ISO3 == "USA"
+  ) |>
+  transmute(
+    year,
+    hpi = HPI,
+    infl,
+    unemprate = unemp / pop
+  ) -> gmddt
+```
+
+
+Merge the datasets.
+
+```{r}
+dt <- left_join(wbdt, gmddt)
+```
+
+Some final recodes.
+
+```{r}
+pdiff <- function(x1, x0) {
+  (x1 - x0) / x0
+}
+dt |>
+  mutate(
+    across(
+      tariff:unemprate,
+      ~ pdiff(
+        .x, lag(.x, order_by = year)
+      ),
+      .names = "{.col}_d"
+    ),
+    tariff_cat = frcode(
+      tariff_d > 0 ~ "Increased",
+      tariff_d == 0 ~ "No Change",
+      tariff_d < 0 ~ "Reduced"
+    )
+  ) -> dt
+
+dt |>
+  drop_na() -> dt
+```
+
+
+## Figures
+
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+source(
+  here::here("_helpers", "my_mean_ci.R")
+)
+ggplot(dt) +
+  aes(infl, tariff_cat) +
+  stat_summary(
+    fun.data = my_mean_ci
+  ) +
+  labs(
+    title = str_wrap(
+      "Average inflation by whether U.S. tariffs went down, stayed the same, or when up",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data sources: Global Macro Database and the World Bank",
+      width = 60
+    ),
+    x = "Inflation (% change to CPI)",
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    labels = ~ paste0(.x , "%")
+  )
+saveit(1)
+```
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+source(
+  here::here("_helpers", "my_mean_ci.R")
+)
+ggplot(dt) +
+  aes(hpi_d, tariff_cat) +
+  stat_summary(
+    fun.data = my_mean_ci
+  ) +
+  labs(
+    title = str_wrap(
+      "Average housing price inflation by whether U.S. tariffs went down, stayed the same, or when up",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data sources: Global Macro Database and the World Bank",
+      width = 60
+    ),
+    x = "Housing inflation (% change to HPI)",
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    labels = ~ paste0(.x , "%")
+  )
+saveit(2)
+```
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+source(
+  here::here("_helpers", "my_mean_ci.R")
+)
+ggplot(dt) +
+  aes(unemprate_d, tariff_cat) +
+  stat_summary(
+    fun.data = my_mean_ci
+  ) +
+  labs(
+    title = str_wrap(
+      "Average % change to unemployment by whether U.S. tariffs went down, stayed the same, or when up",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data sources: Global Macro Database and the World Bank",
+      width = 60
+    ),
+    x = "% Change in Unemployment Rate",
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    labels = scales::percent
+  )
+saveit(3)
+```
