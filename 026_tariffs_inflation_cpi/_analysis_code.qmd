@@ -170,7 +170,7 @@ ggplot(dt) +
     caption = logo
   ) +
   scale_x_continuous(
-    labels = ~ paste0(.x , "%")
+    labels = scales::percent
   )
 saveit(2)
 ```
