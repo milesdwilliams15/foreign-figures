@@ -1,0 +1,164 @@
+---
+title: "Lead donor by default?"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "red3",
+    "navy",
+    "steelblue"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("skyblue1", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here(
+      "027_lead_donor",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+dt <- read_csv(
+  here("_data", "cleaned_aid_data.csv")
+)
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  group_by(year) |>
+  mean_ci(lead_donor * 100) |>
+  ggplot() +
+  aes(year, mean, ymin = lower, ymax = upper) +
+  geom_pointrange(color = "orange3") +
+  theme(panel.grid.major.x = element_blank()) +
+  labs(
+    title = str_wrap(
+      "Yearly rate of lead donorship, 2000-2021",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "% rate shown with 95% confidence intervals. Data sources: OECD + AidData.",
+      width = 50
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = ~ paste0(.x, "%")
+  )
+saveit(1)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  filter(
+    ccode1 %in% c(2, 710)
+  ) |>
+  mutate(
+    donor = ifelse(ccode1 == 2, "USA", "PRC")
+  ) |>
+  group_by(year, donor) |>
+  mean_ci(lead_donor * 100) |>
+  ggplot() +
+  aes(year, mean, ymin = lower, ymax = upper) +
+  geom_pointrange(
+    aes(color = donor),
+    position = position_dodge(-.5)
+  ) +
+  theme(panel.grid.major.x = element_blank()) +
+  labs(
+    title = str_wrap(
+      "Yearly rate of lead donorship for the U.S. and China, 2000-2021",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "% rate shown with 95% confidence intervals. Data sources: OECD + AidData.",
+      width = 50
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = "Donor:"
+  ) +
+  scale_y_continuous(
+    labels = ~ paste0(.x, "%")
+  ) +
+  ggpal("binary")
+saveit(2)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+dt |>
+  filter(ccode1 == 710) |>
+  select(ccode2, year, lead_donor, lead_donor_nus) |>
+  pivot_longer(3:4) |>
+  mutate(
+    name = ifelse(name == "lead_donor", "Yes", "No")
+  ) |>
+  group_by(year, name) |>
+  mean_ci(value * 100) |>
+  ggplot() +
+  aes(year, mean, ymin = lower, ymax = upper) +
+  geom_pointrange(
+    aes(color = name),
+    position = position_dodge(-.5)
+  ) +
+  theme(panel.grid.major.x = element_blank()) +
+  labs(
+    title = str_wrap(
+      "Yearly rate of lead donorship for China with and without the United States, 2000-2021",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "% rate shown with 95% confidence intervals. Data sources: OECD + AidData.",
+      width = 50
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = "With USA?"
+  ) +
+  ggpal("binary") +
+  scale_y_continuous(
+    labels = ~ paste0(.x, "%")
+  )
+saveit(3, 5)
+```
+
