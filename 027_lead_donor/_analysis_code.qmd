@@ -57,17 +57,18 @@ dt |>
   group_by(year) |>
   mean_ci(lead_donor * 100) |>
   ggplot() +
-  aes(year, mean, ymin = lower, ymax = upper) +
-  geom_pointrange(color = "orange3") +
+  aes(year, mean) +
+  geom_point(color = "orange3") +
+  geom_line(color = "orange3") +
   theme(panel.grid.major.x = element_blank()) +
   labs(
     title = str_wrap(
-      "Yearly rate of lead donorship, 2000-2021",
+      "Yearly % rate of lead donorship, 2000-2021",
       width = 37
     ),
     subtitle = str_wrap(
-      "% rate shown with 95% confidence intervals. Data sources: OECD + AidData.",
-      width = 50
+      "Data sources: OECD + AidData.",
+      width = 55
     ),
     x = NULL,
     y = NULL,
@@ -93,19 +94,17 @@ dt |>
   group_by(year, donor) |>
   mean_ci(lead_donor * 100) |>
   ggplot() +
-  aes(year, mean, ymin = lower, ymax = upper) +
-  geom_pointrange(
-    aes(color = donor),
-    position = position_dodge(-.5)
-  ) +
+  aes(year, mean, color = donor) +
+  geom_point() +
+  geom_line() +
   theme(panel.grid.major.x = element_blank()) +
   labs(
     title = str_wrap(
-      "Yearly rate of lead donorship for the U.S. and China, 2000-2021",
+      "Yearly % rate of lead donorship for the U.S. and China, 2000-2021",
       width = 37
     ),
     subtitle = str_wrap(
-      "% rate shown with 95% confidence intervals. Data sources: OECD + AidData.",
+      "Data sources: OECD + AidData.",
       width = 50
     ),
     x = NULL,
@@ -135,19 +134,17 @@ dt |>
   group_by(year, name) |>
   mean_ci(value * 100) |>
   ggplot() +
-  aes(year, mean, ymin = lower, ymax = upper) +
-  geom_pointrange(
-    aes(color = name),
-    position = position_dodge(-.5)
-  ) +
+  aes(year, mean, color = name) +
+  geom_point() +
+  geom_line() +
   theme(panel.grid.major.x = element_blank()) +
   labs(
     title = str_wrap(
-      "Yearly rate of lead donorship for China with and without the United States, 2000-2021",
+      "Yearly % rate of lead donorship for China with and without the United States, 2000-2021",
       width = 37
     ),
     subtitle = str_wrap(
-      "% rate shown with 95% confidence intervals. Data sources: OECD + AidData.",
+      "Data sources: OECD + AidData.",
       width = 50
     ),
     x = NULL,
