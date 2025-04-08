@@ -1,0 +1,354 @@
+---
+title: "Top exporters"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "red3",
+    "navy",
+    "steelblue"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("skyblue1", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here(
+      "028_top_exporters",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(peacesciencer)
+library(priceR)
+
+create_dyadyears(
+  subset_years = 2014
+) |>
+  add_cow_trade() |>
+  add_sdp_gdp() -> dt
+
+dt |>
+  mutate(
+    m11 = afi(
+      flow1, 
+      2014,
+      "US",
+      2023,
+      retrieve_inflation_data("US"),
+      show_countries()
+    ),
+    x11 = afi(
+      flow2, 
+      2014,
+      "US",
+      2023,
+      retrieve_inflation_data("US"),
+      show_countries()
+    ),
+    gdp = exp(wbgdp2011est1) / 1e06,
+    gdp = afi(
+      gdp,
+      2011,
+      "US",
+      2023,
+      retrieve_inflation_data("US"),
+      show_countries()
+    )
+  ) -> dt
+
+dt |>
+  mutate(
+    across(m11:x11, ~ replace_na(.x, 0))
+  ) -> dt
+
+## US should have a deficit:
+dt |>
+  filter(ccode1 == 2) |>
+  summarize(
+    sum(x11) - sum(m11)
+  ) # yes, got it right.
+```
+
+## Figures
+
+```{r}
+dt |>
+  group_by(ccode1) |>
+  summarize(
+    x_to_us = sum(x11[ccode2 == 2]),
+    x_total = sum(x11),
+    gdp = unique(gdp1),
+    .groups = "drop"
+  ) |>
+  mutate(
+    country = countrycode::countrycode(
+      ccode1,
+      "cown",
+      "country.name"
+    )
+  ) -> smdt
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+smdt |>
+  slice_max(x_to_us, n = 10) |>
+  ggplot() +
+  aes(x_to_us, reorder(country, x_to_us)) +
+  geom_point(size = 2, color = "navy") +
+  scale_x_continuous(
+    labels = ~ scales::dollar(
+      .x / 1e03
+    )
+  ) +
+  labs(
+    title = str_wrap(
+      "Top 10 exporters to the U.S. in 2014",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data: Correlates of War. Billions of 2023 U.S. Dollars.",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(1)
+```
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+smdt |>
+  mutate(
+    x_to_us = x_to_us / gdp
+  ) |>
+  slice_max(x_to_us, n = 10) |>
+  ggplot() +
+  aes(x_to_us, reorder(country, x_to_us)) +
+  geom_point(size = 2, color = "navy") +
+  scale_x_continuous(
+    labels = scales::percent
+  ) +
+  labs(
+    title = str_wrap(
+      "Top 10 exporters to the U.S. in 2014 (by country GDP)",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data: Correlates of War. % of GDP.",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(2)
+```
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+smdt |>
+  mutate(
+    x_to_us = x_to_us / x_total
+  ) |>
+  slice_max(x_to_us, n = 10) |>
+  ggplot() +
+  aes(x_to_us, reorder(country, x_to_us)) +
+  geom_point(size = 2, color = "navy") +
+  scale_x_continuous(
+    labels = scales::percent
+  ) +
+  labs(
+    title = str_wrap(
+      "Top 10 exporters to the U.S. in 2014 (per all country exports)",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data: Correlates of War. % of exports.",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(3)
+```
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  filter(ccode1 == 2) |>
+  mutate(
+    deficit = x11 - m11,
+    country = countrycode::countrycode(
+      ccode2,
+      "cown",
+      "country.name"
+    )
+  ) |>
+  slice_min(deficit, n = 10) |>
+    ggplot() +
+  aes(deficit, reorder(country, -deficit)) +
+  geom_point(size = 2, color = "navy") +
+  scale_x_continuous(
+    labels = ~ scales::dollar(.x/1e03)
+  ) +
+  labs(
+    title = str_wrap(
+      "Top 10 trade partners by U.S. trade deficit",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data: Correlates of War. Billions of 2023 U.S. Dollars.",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(4)
+```
+
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+dt |>
+  filter(ccode1 == 2) |>
+  mutate(
+    deficit = x11 - m11,
+    country = countrycode::countrycode(
+      ccode2,
+      "cown",
+      "country.name"
+    )
+  ) -> smdt2
+
+left_join(
+  smdt |> select(country, x_to_us, x_total),
+  smdt2 |> select(country, deficit)
+) |>
+  filter(
+    deficit < 0
+  ) |>
+  mutate(
+    deficit = abs(deficit)
+  ) |>
+  ggplot() +
+  aes(deficit, x_to_us/ x_total) +
+  geom_point(
+    color = "navy"
+  ) +
+  stat_smooth(
+    color = "orange3",
+    fill = "orange3",
+    method = "gam",
+    method.args = list(
+      family = quasipoisson
+    )
+  ) +
+  scale_x_log10(
+    labels = ~ scales::dollar(.x / 1e03)
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  ) +
+  labs(
+    title = str_wrap(
+      "Share (%) of country exports to the U.S. by the absolute magnitude of the U.S. trade deficit",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data: Correlates of War."
+    ),
+    x = "Deficit in Billions",
+    y = "% U.S. Exports",
+    caption = logo
+  )
+saveit(5, 5)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+left_join(
+  smdt |> select(country, x_to_us, gdp),
+  smdt2 |> select(country, deficit)
+) |>
+  filter(
+    deficit < 0
+  ) |>
+  mutate(
+    deficit = abs(deficit)
+  ) |>
+  ggplot() +
+  aes(deficit, x_to_us/ gdp) +
+  geom_point(
+    color = "navy"
+  ) +
+  stat_smooth(
+    color = "orange3",
+    fill = "orange3",
+    method = "gam",
+    method.args = list(
+      family = quasipoisson
+    )
+  ) +
+  scale_x_log10(
+    labels = ~ scales::dollar(.x / 1e03)
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  ) +
+  labs(
+    title = str_wrap(
+      "Share (%) of exports per GDP by the absolute magnitude of the U.S. trade deficit",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data: Correlates of War."
+    ),
+    x = "Deficit in Billions",
+    y = "% U.S. Exports",
+    caption = logo
+  )
+saveit(6, 5)
+```
+
