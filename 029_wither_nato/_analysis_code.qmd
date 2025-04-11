@@ -1,0 +1,348 @@
+---
+title: "Wither NATO without the US?"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "red3",
+    "navy",
+    "steelblue"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("skyblue1", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here(
+      "029_wither_nato",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+
+## all countries in the CoW system from 45 to 2024
+library(peacesciencer)
+create_stateyears(
+  subset_years = 1990:2023
+) -> sy
+
+## get gdp and population data from the world bank
+library(wbstats)
+inds <- c("gdp" = "NY.GDP.MKTP.PP.KD", "pop" = "SP.POP.TOTL")
+wb_data(
+  indicator = inds,
+  start_date = 1960,
+  end_date = 2023
+) -> wb
+
+## aggregate to avoid duplicates then merge with state-year data
+wb |>
+  mutate(
+    ccode = countrycode::countrycode(
+      iso3c, "iso3c", "cown"
+    ),
+    year = date,
+  ) |>
+  group_by(ccode, year) |>
+  summarize(
+    gdp = sum(gdp),
+    pop = sum(pop)
+  ) |>
+  right_join(
+    sy
+  ) -> dt
+
+## convert prices to 2011 values to be consistent with Fariss et al.
+library(priceR)
+
+infdt <- retrieve_inflation_data("US")
+cntys <- show_countries()
+
+dt |>
+  mutate(
+    gdp = afi(
+      gdp, 2021, "US", 2011, infdt, cntys
+    )
+  ) -> dt
+
+## fix missing values for population
+dt |>
+  group_by(ccode) |>
+  mutate(
+    pop = replace_na(pop, max(pop, na.rm = T))
+  ) -> dt
+
+## drop nas
+dt |>
+  drop_na() -> dt
+
+## calculate SDP
+dt |>
+  mutate(
+    v = (365 * 3 * pop), # <--- subsistence ($3 per day for pop)
+    sdp = gdp - v,
+    sdp = ifelse(sdp < 0, 0, sdp)
+  ) -> dt
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(year, gdp) +
+  geom_line(
+    aes(group = ccode),
+    color = "gray",
+    linewidth = .1
+  ) +
+  geom_labelline(
+    data = . %>% filter(ccode == 2),
+    label = "United States",
+    color = "navy",
+    linewidth = 1
+  ) +
+  geom_labelline(
+    data = . %>% filter(ccode == 710),
+    label = "China",
+    color = "orange3",
+    linewidth = 1
+  ) +
+  geom_labelline(
+    data = . %>% filter(ccode == 365),
+    label = "Russia",
+    color = "steelblue",
+    linewidth = 1
+  ) +
+  labs(
+    title = str_wrap(
+      "US and Chinese GDP far outpace the rest of the world",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "GDP measured in trillions of 2011 dollars at purchasing power parity (PPP) from 1989 to 2023",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = seq(1990, 2020, by = 5)
+  ) +
+  scale_y_continuous(
+    labels = ~ paste0("$", .x / 1e12)
+  )
+saveit(1)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(year, sdp) +
+  geom_line(
+    aes(group = ccode),
+    color = "gray",
+    linewidth = .1
+  ) +
+  geom_labelline(
+    data = . %>% filter(ccode == 2),
+    label = "United States",
+    color = "navy",
+    linewidth = 1
+  ) +
+  geom_labelline(
+    data = . %>% filter(ccode == 710),
+    label = "China",
+    color = "orange3",
+    linewidth = 1
+  ) +
+  geom_labelline(
+    data = . %>% filter(ccode == 365),
+    label = "Russia",
+    color = "steelblue",
+    linewidth = 1
+  ) +
+  labs(
+    title = str_wrap(
+      "US and Chinese SDP far outpace the rest of the world",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "SDP measured in trillions of 2011 dollars at purchasing power parity (PPP) from 1989 to 2023",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = seq(1990, 2020, by = 5)
+  ) +
+  scale_y_continuous(
+    labels = ~ paste0("$", .x / 1e12)
+  )
+saveit(2)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(year, v) +
+  geom_line(
+    aes(group = ccode),
+    color = "gray",
+    linewidth = .1
+  ) +
+  geom_labelline(
+    data = . %>% filter(ccode == 2),
+    label = "United States",
+    color = "navy",
+    linewidth = 1
+  ) +
+  geom_labelline(
+    data = . %>% filter(ccode == 710),
+    label = "China",
+    color = "orange3",
+    linewidth = 1
+  ) +
+  geom_labelline(
+    data = . %>% filter(ccode == 365),
+    label = "Russia",
+    color = "steelblue",
+    linewidth = 1
+  ) +
+  labs(
+    title = str_wrap(
+      "China's subsistence needs far outpace the rest of the world",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Subsistence measured in billions of 2011 dollars at purchasing power parity (PPP) from 1989 to 2023",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = seq(1990, 2020, by = 5)
+  ) +
+  scale_y_continuous(
+    labels = ~ paste0("$", .x / 1e12)
+  )
+saveit(3)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+## get nato allies
+nato <- read_csv(
+  here::here(
+    "_data",
+    "_nato_allies.csv"
+  )
+)
+
+dt |>
+  filter(
+    year == 2023,
+    ccode %in% c(
+      710,
+      365,
+      nato$ccode
+    )
+  ) |>
+  mutate(
+    nato = frcode(
+      ccode %in% nato$ccode ~ "NATO",
+      ccode == 710 ~ "China",
+      ccode == 365 ~ "Russia"
+    )
+  ) |>
+  group_by(nato) |>
+  summarize(
+    sdp_no_us = sum(sdp[ccode != 2]),
+    sdp_yes_us = sum(sdp)
+  ) |>
+  pivot_longer(
+    -nato
+  ) |>
+  distinct(nato, value) |>
+  mutate(
+    ord = c(2, 1, 3, 4),
+    nato = frcode(
+      ord == 1 ~ "  NATO (with US)",
+      ord == 2 ~ "  NATO (without US)",
+      ord == 3 ~ "  China",
+      ord == 4 ~ "  Russia"
+    )
+  ) |>
+  ggplot() +
+  aes(value, reorder(nato, -ord)) +
+  geom_col(
+    fill = "orange3"
+  ) +
+  facet_wrap(
+    ~ nato, scales = "free_y",
+    ncol = 1
+  ) +
+  scale_y_discrete(
+    breaks = NULL
+  ) +
+  theme(
+    panel.grid.major = element_blank(),
+    strip.text = element_text(
+      hjust = 0,
+      face = "bold"
+    )
+  ) +
+  labs(
+    title = str_wrap(
+      "How powerful is NATO without the US?",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Total SDP shown for 2023 in trillions of 2011 values",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    labels = ~ paste0("$", .x / 1e12)
+  )
+saveit(4)
+```
+
