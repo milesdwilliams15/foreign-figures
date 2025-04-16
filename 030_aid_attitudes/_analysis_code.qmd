@@ -1,0 +1,230 @@
+---
+title: "Attitudes about Aid"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("skyblue1", "navy"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here(
+      "030_aid_attitudes",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+## read in the gss data
+gss <- haven::read_dta(
+  here::here("_data", "gss_2022.dta")
+)
+```
+
+Recodes:
+
+```{r}
+gss |>
+  transmute(
+    aid = frcode(
+      nataid == 1 ~ "Too little",
+      nataid == 2 ~ "About right",
+      nataid == 3 ~ "Too much"
+    ),
+    party = frcode(
+      partyid %in% 1:2 ~ "Democrat",
+      partyid == 3 ~ "Independent",
+      partyid %in% 4:5 ~ "Republican"
+    ),
+    att = frcode(
+      attend %in% 0:1 ~ "Never or < Year",
+      attend == 2 ~ "Once or Twice a Year",
+      attend == 3 ~ "Several Times a Year",
+      attend %in% 4:5 ~ "Monthly",
+      attend %in% 6:8 ~ "About Weekly or More"
+    )
+  ) -> gss_sm
+```
+
+## Figures
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+gss_sm |>
+  ct(aid, show_na = F) |>
+  ggplot() +
+  aes(pct, aid) +
+  geom_col(
+    fill = "navy",
+    width = .5
+  ) +
+  geom_text(
+    aes(label = scales::percent(pct)),
+    family = "mono",
+    fontface = "bold",
+    color = "orange3",
+    hjust = 1.2
+  ) +
+  scale_x_continuous(
+    labels = scales::percent
+  ) +
+  labs(
+    title = str_wrap(
+      "Do you think we're spending too little, too much, or about the right amount on foreign aid?",
+      width = 37
+    ),
+    subtitle = "Responses from GSS 2022",
+    x = "% of Respondents",
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    panel.grid.major.y = element_blank()
+  )
+saveit(1)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+gss_sm |>
+  drop_na(party) |>
+  group_by(party) |>
+  ct(aid, show_na = F) |>
+  ggplot() +
+  aes(pct, aid) +
+  geom_col(
+    aes(fill = party),
+    width = .5,
+    position = position_dodge(.7)
+  ) +
+  geom_text(
+    aes(label = scales::percent(pct),
+        group = party),
+    family = "mono",
+    fontface = "bold",
+    color = "navy",
+    hjust = -.2,
+    position = position_dodge(.7)
+  ) +
+  ggpal(aes = "fill") +
+  scale_x_continuous(
+    labels = scales::percent,
+    limits = c(0,.8)
+  ) +
+  labs(
+    title = str_wrap(
+      "Do you think we're spending too little, too much, or about the right amount on foreign aid?",
+      width = 37
+    ),
+    subtitle = "Responses from GSS 2022",
+    x = "% of Respondents",
+    y = NULL,
+    caption = logo,
+    fill = NULL
+  ) +
+  theme(
+    panel.grid.major.y = element_blank()
+  )
+saveit(2, 5)
+```
+
+
+```{r}
+#| fig-height: 6
+#| fig-width: 6
+
+gss_sm |>
+  drop_na(att, aid) |>
+  xheat(att, aid) +
+  ggpal("diverging", "fill", midpoint = .5) +
+  my_theme() +
+  theme(
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1
+    ),
+    legend.position = ""
+  ) +
+  labs(
+    title = str_wrap(
+      "Do you think we're spending too little, too much, or about the right amount on foreign aid?",
+      width = 37
+    ),
+    subtitle = "Responses from GSS 2022",
+    x = "How often do you attend religious service?",
+    y = NULL,
+    caption = logo,
+    fill = NULL
+  ) 
+saveit(3, 6)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+gss_sm |>
+  group_by(party, att) |>
+  mean_ci(aid == "Too much") |>
+  drop_na() |>
+  ggplot() +
+  aes(mean, reorder(att, - as.numeric(att)), 
+      xmin = lower, xmax = upper, 
+      color = party) +
+  geom_pointrange(
+    position = position_dodge(.3)
+  ) +
+  ggpal() +
+  theme(
+    panel.grid.major.y = element_line(
+      color = "white",
+      linewidth = 10
+    )
+  ) +
+  scale_x_continuous(
+    labels = scales::percent,
+    n.breaks = 10
+  ) +
+  labs(
+    title = str_wrap(
+      "Share saying we spend too much on aid",
+      width = 37
+    ),
+    subtitle = "Responses from GSS 2022",
+    x = "% Respondents",
+    y = NULL,
+    caption = logo,
+    color = NULL
+  ) 
+saveit(4)
+```
+
