@@ -1,0 +1,233 @@
+---
+title: "Aid and Migration"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("skyblue1", "navy"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here(
+      "031_aid_and_migration",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+## read in the gss data
+gss <- haven::read_dta(
+  here::here("_data", "gss_2022.dta")
+)
+```
+
+Recodes:
+
+```{r}
+gss |>
+  rowwise() |>
+  mutate(
+    aid = ifelse(
+      is.na(nataid),
+      nataidy, nataid
+    )
+  ) |>
+  ungroup() |>
+  transmute(
+    cutaid = ifelse(
+      aid == 3,
+      1, 0
+    ),
+    cutmig = ifelse(
+      LETIN1A > 3,
+      1, 0
+    ),
+    party = frcode(
+      partyid %in% 1:2 ~ "Democrat",
+      partyid == 3 ~ "Independent",
+      partyid %in% 4:5 ~ "Republican",
+      TRUE ~ "Other"
+    )
+  ) |> drop_na(cutmig, cutaid) -> gss_sm
+```
+
+
+## Figures
+
+```{r}
+gss_sm |>
+  summarize(
+    across(cutaid:cutmig, mean)
+  )
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+gss_sm |>
+  group_by(party) |>
+  summarize(
+    across(cutaid:cutmig, mean)
+  ) |>
+  pivot_longer(-party)|>
+  mutate(name = rep(c("Cuts to Aid", "Cuts to Migration"), len = n())) |>
+  ggplot() +
+  aes(value, party, fill = name) +
+  geom_col(
+    position = "dodge",
+    width = .5
+  ) +
+  geom_text(
+    aes(label = paste0(" ",round(100*value),"%")),
+    hjust = 0,
+    position = position_dodge(.5),
+    family = "mono",
+    fontface = "bold"
+  ) +
+  ggpal("binary", "fill") +
+  labs(
+    title = str_wrap(
+      "Support for cutting aid and migration by partisanship",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data from 2022 GSS"
+    ),
+    x = "% respondents in favor of cuts",
+    y = NULL,
+    fill = NULL,
+    caption = logo
+  ) +
+  theme(
+    panel.grid.major = element_blank()
+  ) +
+  scale_x_continuous(breaks = NULL, limits = c(0, .8)) +
+  scale_y_discrete(breaks = NULL) +
+  geom_text(
+    aes(x = 0, y = party, label = party),
+    hjust = 0,
+    vjust = -1.3,
+    family = "mono",
+    fontface = "bold"
+  )
+saveit(1)
+```
+
+
+```{r}
+#| fig-height: 3
+#| fig-width: 6
+source(here::here("_helpers", "my_mean_ci.R"))
+ggplot(gss_sm) +
+  aes(
+    cutaid,
+    ifelse(cutmig == 1, "Cut migration", "Keep migration the\nsame or increase")
+  ) +
+  stat_summary(
+    fun.data = my_mean_ci,
+    color = "orange3"
+  ) +
+  ggrepel::geom_text_repel(
+    data = . %>%
+      filter(cutmig == 1) %>%
+      summarize(y = mean(cutaid)),
+    aes(x = y, y = "Cut migration",
+        label = "Percentage with\n83.4% CIs"),
+    nudge_x = -.15,
+    nudge_y = .5,
+    segment.curvature = -.1,
+    color = "navy",
+    family = "mono",
+    fontface = "bold",
+    point.padding = .2
+  ) +
+  labs(
+    title = str_wrap(
+      "People who want lower migration want to cut foreign aid",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data from the 2022 GSS"
+    ),
+    x = "% saying we spend too much on aid",
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    panel.grid.major.y = element_line(
+      linetype = 2,
+      color = "navy"
+    )
+  ) +
+  scale_x_continuous(
+    labels = scales::percent
+  )
+saveit(2, 3)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+source(here::here("_helpers", "my_mean_ci.R"))
+ggplot(gss_sm) +
+  aes(
+    cutaid,
+    ifelse(cutmig == 1, "Cut migration", "Keep migration the\nsame or increase"),
+    color = party
+  ) +
+  stat_summary(
+    fun.data = my_mean_ci,
+    position = position_dodge(-.5)
+  ) +
+  labs(
+    title = str_wrap(
+      "People who want lower migration want to cut foreign aid",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data from the 2022 GSS"
+    ),
+    x = "% saying we spend too much on aid\n(with 83.4% CIs)",
+    y = NULL,
+    caption = logo,
+    color = NULL
+  ) +
+  theme(
+    panel.grid.major.y = element_line(
+      linetype = 2,
+      color = "navy"
+    )
+  ) +
+  scale_x_continuous(
+    labels = scales::percent
+  ) +
+  ggpal()
+saveit(3, 4)
+```
