@@ -1,0 +1,248 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("skyblue1", "navy"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here(
+      "032_aid_experiment",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+Codebook: https://drive.google.com/file/d/1ga7g1WRCrAuy-PO6_73kAUyj20LNMPVM/view?usp=sharing
+
+```{r}
+library(googlesheets4)
+gs4_deauth()
+a25 <- range_speedread("https://docs.google.com/spreadsheets/d/1npon5F_Gr40HQj8KVeHq_un7SOep4dzc6kjP0px7nLo/edit?usp=sharing")
+a25 <- a25 |> rename_all(str_to_lower)
+```
+
+Recode experimental variables:
+
+```{r}
+a25 |>
+  mutate(
+    aid = ifelse(
+      is.na(q34), q35, q34
+    ),
+    aid = frcode(
+      aid == 1 ~ "Too much",
+      aid == 2 ~ "Just right",
+      aid == 3 ~ "Not enough"
+    ),
+    treat = case_when(
+      !is.na(q34) ~ "No",
+      !is.na(q35) ~ "Yes"
+    ),
+    party = frcode(
+      q3 %in% 1:3 ~ "Democrat",
+      q3 == 4 ~ "Independent",
+      q3 %in% 5:7 ~ "Republican",
+      TRUE ~ "Other"
+    )
+  ) -> a25
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 3
+#| fig-width: 6
+
+a25 |>
+  ct(aid, show_na = F) |>
+  ggplot() +
+  aes(pct, aid) +
+  geom_col(fill = "navy") +
+  geom_text(
+    aes(label = percent(pct)),
+    family = "mono",
+    fontface = "bold",
+    color = "orange3",
+    hjust = 1.2
+  ) +
+  labs(
+    title = str_wrap(
+      "Aid attitudes among Denison students",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Historically do you think the US has spent too much, just the right amount, or not enough on foreign aid?",
+      width = 55
+    ),
+    x = "% Responses",
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = NULL
+  ) +
+  theme(
+    panel.grid.major.y = element_blank()
+  )
+saveit(1, 3)
+```
+
+```{r}
+a25 |>
+  ct(treat)
+```
+
+
+
+```{r}
+#| fig-height: 4.5
+#| fig-width: 6
+
+a25 |>
+  group_by(treat) |>
+  ct(aid, show_na = F) |>
+  mutate(
+    se = sqrt(pct * (1 - pct) / n),
+    lo = pct - qt(0.834, n - 1) * se,
+    hi = pct + qt(0.834, n - 1) * se
+  ) |>
+  ggplot() +
+  aes(pct, aid, color = treat) +
+  geom_pointrange(
+    aes(xmin = lo, xmax = hi),
+    position = position_dodge(-.5)
+  ) +
+  geom_text(
+    aes(label = percent(pct)),
+    family = "mono",
+    fontface = "bold",
+    position = position_dodge(-.5),
+    show.legend = F,
+    vjust = rep(c(-1, 1.5), each = 3)
+  ) +
+  labs(
+    title = str_wrap(
+      "Aid attitudes among Denison students",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Historically do you think the US has spent too much, just the right amount, or not enough on foreign aid?",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = str_wrap(
+      "Told the US spends 1% of its budget on aid?",
+      width = 30
+    )
+  ) +
+  scale_x_continuous(
+    breaks = NULL
+  ) +
+  theme(
+    panel.grid.major.y = element_line(
+      linetype = 2,
+      color = "navy"
+    ),
+    panel.grid.major.x = element_blank(),
+    legend.title = element_text(hjust = .5),
+    legend.title.position = "top",
+    legend.background = element_rect(
+      linetype = 1, color = "black"
+    )
+  ) +
+  ggpal("binary")
+saveit(2, 4.5)
+```
+
+
+```{r}
+#| fig-height: 4.5
+#| fig-width: 6
+
+a25 |>
+  group_by(party, treat) |>
+  mean_ci(
+    aid == "Too much",
+    ci = .834
+  ) |> drop_na() |>
+  filter(party != "Other") |>
+  ggplot() +
+  aes(mean, party, xmin = lower, xmax = upper, color = treat) +
+  geom_pointrange(
+    position = position_dodge(-.5)
+  ) +
+  geom_text(
+    aes(label = percent(mean)),
+    family = "mono",
+    fontface = "bold",
+    position = position_dodge(-.5),
+    show.legend = F,
+    vjust = rep(c(-1, 1.5), len = 6)
+  ) +
+  labs(
+    title = str_wrap(
+      "Aid attitudes among Denison students",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Share (%) of students saying the US spends too much on foreign aid",
+      width = 50
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = str_wrap(
+      "Told the US spends 1% of its budget on aid?",
+      width = 30
+    )
+  ) +
+  scale_x_continuous(
+    breaks = NULL
+  ) +
+  theme(
+    panel.grid.major.y = element_line(
+      linetype = 2,
+      color = "navy"
+    ),
+    panel.grid.major.x = element_blank(),
+    legend.title = element_text(hjust = .5),
+    legend.title.position = "top",
+    legend.background = element_rect(
+      linetype = 1, color = "black"
+    )
+  ) +
+  ggpal("binary")
+saveit(3, 4.5)
+```
+
