@@ -1,0 +1,200 @@
+---
+title: "War and Negotiated Settlement"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("skyblue1", "navy"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here(
+      "033_war_negotiation",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+mie <- read_csv(
+  here(
+    "_data",
+    "mie-1.0.csv"
+  )
+)
+mic <- read_csv(
+  here(
+    "_data",
+    "mic-conf-1.0.csv"
+  )
+)
+dt <- left_join(
+  mie,
+  mic |> select(micnum, outcome)
+)
+```
+
+```{r}
+dt |>
+  mutate(
+    c1 = pmin(ccode1, ccode2),
+    c2 = pmax(ccode1, ccode2),
+    c1 = countrycode::countrycode(
+      c1, "cown", "country.name"
+    ),
+    c2 = countrycode::countrycode(
+      c2, "cown", "country.name"
+    ),
+    dyad = paste0(c1, "-", c2),
+    outcome = frcode(
+      outcome %in% 1:2 ~ "Victory",
+      outcome %in% 3:4 ~ "Yield",
+      outcome == 5 ~ "Stalemate",
+      outcome == 6 ~ "Compromise",
+      outcome == 7 ~ "Released",
+      outcome == 8 ~ "Unclear"
+    )
+  ) |>
+  group_by(micnum, dyad) |>
+  summarize(
+    styear = min(styear),
+    endyear = max(endyear),
+    outcome = unique(outcome)
+  ) -> sdt
+```
+
+```{r}
+sdt |>
+  arrange(dyad, styear) |> 
+  group_by(dyad) |>
+  mutate(
+    time = lead(styear, order_by = styear) - endyear
+  ) |>
+  ungroup() -> sdt
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+sdt |>
+  drop_na(outcome) |>
+  filter(styear <= 2010) |>
+  group_by(endyear) |>
+  ct(outcome) |>
+  ggplot() +
+  aes(endyear, pct) +
+  geom_line(color = "orange3") +
+  geom_smooth(se = F, color = "navy") +
+  facet_wrap(~ outcome) +
+  labs(
+    title = str_wrap(
+      "How do conflicts typically end?",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "% share of conflicts by outcome, 1816-2010"
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = percent
+  )
+saveit(1)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+sdt |>
+  filter(!is.na(outcome), outcome != "Unclear") |>
+  mutate(
+    relapse = ifelse(!is.na(time), 1, 0)
+  ) |>
+  ggplot() +
+  aes(relapse, outcome) +
+  stat_summary(
+    fun.data = mean_cl_boot,
+    color = "navy"
+  ) +
+  labs(
+    title = str_wrap(
+      "How often do countries fight again?",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "% rate at which country pairs engage in use of force or fight a war based on previous conflict outcome (bootstrapped 95% confidence intervals shown)",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    labels = percent,
+    breaks = seq(0, 1, by = .05)
+  )
+saveit(2)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+sdt |>
+  filter(!is.na(outcome), outcome != "Unclear") |>
+  ggplot() +
+  aes(time, outcome) +
+  stat_summary(
+    fun.data = mean_cl_boot,
+    color = "navy"
+  ) +
+  labs(
+    title = str_wrap(
+      "How long until countries fight again?",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Years between a past and future instance of use of force or war between country pairs by previous conflict outcome (bootstrapped 95% confidence intervals shown)",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    n.breaks = 10
+  )
+saveit(3)
+```
