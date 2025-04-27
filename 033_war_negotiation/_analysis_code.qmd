@@ -53,10 +53,19 @@ mic <- read_csv(
     "mic-conf-1.0.csv"
   )
 )
-dt <- left_join(
-  mie,
-  mic |> select(micnum, outcome)
+micend <- read_csv(
+  here(
+    "_data",
+    "micend-1.0.csv"
+  )
 )
+dt <- left_join(
+  mie |> select(micnum, ccode1, ccode2, styear),
+  micend |>
+    select(-c(endmonth, endday))
+)
+dt |> 
+  drop_na(endyear) -> dt
 ```
 
 ```{r}
@@ -72,19 +81,35 @@ dt |>
     ),
     dyad = paste0(c1, "-", c2),
     outcome = frcode(
-      outcome %in% 1:2 ~ "Victory",
-      outcome %in% 3:4 ~ "Yield",
-      outcome == 5 ~ "Stalemate",
-      outcome == 6 ~ "Compromise",
-      outcome == 7 ~ "Released",
-      outcome == 8 ~ "Unclear"
+      endingmethod == 0 ~ "No agreement",
+      endingmethod %in% 1:3 ~ 
+        "Written agreement",
+      endingmethod %in% c(4, 6:7) ~
+        "3rd Party Resolution",
+      endingmethod == 8 ~ "Withdrawl",
+      TRUE ~ "Other"
+    ),
+    written = ifelse(
+      outcome == "Written agreement",
+      1, 0
+    ),
+    mediation = ifelse(
+      global == 1 |
+        state == 1 |
+        regional == 1 |
+        nonstate == 1,
+      1, 0
     )
   ) |>
+  select(-c(ccode1, ccode2, c1, c2)) |>
   group_by(micnum, dyad) |>
   summarize(
     styear = min(styear),
     endyear = max(endyear),
-    outcome = unique(outcome)
+    across(
+      everything(),
+      unique
+    )
   ) -> sdt
 ```
 
@@ -106,22 +131,17 @@ sdt |>
 #| fig-width: 6
 
 sdt |>
-  drop_na(outcome) |>
-  filter(styear <= 2010) |>
+  distinct(micnum, endyear, written) |>
   group_by(endyear) |>
-  ct(outcome) |>
+  mean_ci(written) |>
   ggplot() +
-  aes(endyear, pct) +
+  aes(endyear, mean) +
   geom_line(color = "orange3") +
   geom_smooth(se = F, color = "navy") +
-  facet_wrap(~ outcome) +
   labs(
     title = str_wrap(
-      "How do conflicts typically end?",
+      "Share of conflicts that end by written settlement",
       width = 37
-    ),
-    subtitle = str_wrap(
-      "% share of conflicts by outcome, 1816-2010"
     ),
     x = NULL,
     y = NULL,
@@ -138,12 +158,47 @@ saveit(1)
 #| fig-width: 6
 
 sdt |>
-  filter(!is.na(outcome), outcome != "Unclear") |>
+  distinct(micnum, endyear, mediation) |>
+  group_by(endyear) |>
+  mean_ci(mediation) |>
+  ggplot() +
+  aes(endyear, mean) +
+  geom_line(color = "orange3") +
+  geom_smooth(se = F, color = "navy") +
+  labs(
+    title = str_wrap(
+      "Share of conflicts that involve a third-party mediator",
+      width = 37
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = percent
+  )
+saveit(2)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+sdt |>
   mutate(
-    relapse = ifelse(!is.na(time), 1, 0)
+    outcome = case_when(
+      mediation == 1 & written == 1 ~ 
+        "Mediation\n+ Written Agreement",
+      mediation == 1 & written == 0 ~
+        "Mediation\n+ No Written Agreement",
+      mediation == 0 & written == 1 ~
+        "No Mediation\n+ Written Agreement",
+      mediation == 0 & written == 0 ~ 
+        "No Mediation\n+ No Written Agreement"
+    )
   ) |>
   ggplot() +
-  aes(relapse, outcome) +
+  aes(ifelse(!is.na(time), 1, 0), outcome) +
   stat_summary(
     fun.data = mean_cl_boot,
     color = "navy"
@@ -154,7 +209,7 @@ sdt |>
       width = 37
     ),
     subtitle = str_wrap(
-      "% rate at which country pairs engage in use of force or fight a war based on previous conflict outcome (bootstrapped 95% confidence intervals shown)",
+      "Share (%) of the time a pair of countries fight again based on previous conflict outcome (bootstrapped 95% confidence intervals shown)",
       width = 55
     ),
     x = NULL,
@@ -162,39 +217,8 @@ sdt |>
     caption = logo
   ) +
   scale_x_continuous(
-    labels = percent,
-    breaks = seq(0, 1, by = .05)
-  )
-saveit(2)
-```
-
-```{r}
-#| fig-height: 4
-#| fig-width: 6
-
-sdt |>
-  filter(!is.na(outcome), outcome != "Unclear") |>
-  ggplot() +
-  aes(time, outcome) +
-  stat_summary(
-    fun.data = mean_cl_boot,
-    color = "navy"
-  ) +
-  labs(
-    title = str_wrap(
-      "How long until countries fight again?",
-      width = 37
-    ),
-    subtitle = str_wrap(
-      "Years between a past and future instance of use of force or war between country pairs by previous conflict outcome (bootstrapped 95% confidence intervals shown)",
-      width = 55
-    ),
-    x = NULL,
-    y = NULL,
-    caption = logo
-  ) +
-  scale_x_continuous(
-    n.breaks = 10
+    n.breaks = 10,
+    labels = percent
   )
 saveit(3)
 ```
