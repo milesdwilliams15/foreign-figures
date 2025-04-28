@@ -1,0 +1,340 @@
+---
+title: "How conflicts end"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("skyblue1", "navy"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here(
+      "034_how_wars_end",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+micend <- read_csv(
+  here(
+    "_data",
+    "micend-1.0.csv"
+  )
+)
+```
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+m1 <- micend |>
+  select(ceasefire:policychange) |>
+  mutate(
+    withdrawal = ifelse(withdrawal > 0, 1, 0)
+  )
+colnames(m1) <- c(
+  "Ceasefire",
+  "Withdrawal",
+  "Reaffirm Borders/Policies",
+  "Demarcate Borders",
+  "Accept Future Arbitration",
+  "Commit to Future Agreements",
+  "Information Exchange",
+  "At Least One Side Disarms",
+  "Create New Institution",
+  "Refugee Cooperation",
+  "POW Exchange",
+  "Monitors",
+  "Territory Exchange",
+  "Bilateral Trade",
+  "Citizen Travel",
+  "Request Future Mediation",
+  "Compensation for Damages",
+  "Policy Change"
+)
+
+m1 |>
+  pivot_longer(everything()) |>
+  group_by(name) |>
+  ct(value) |>
+  ungroup() |>
+  filter(value > 0) |>
+  arrange(-pct) |>
+  mutate(
+    div = ifelse(1:n() < 10, 0, 1)
+  ) |>
+  ggplot() +
+  aes(pct, reorder(name, pct)) +
+  # geom_pointrange(
+  #   aes(xmin = 0, xmax = pct),
+  #   color = "navy"
+  # ) +
+  geom_col(
+    fill = "navy",
+    width = .25
+  ) +
+  geom_text(
+    aes(x = 0, label = name),
+    hjust = 0,
+    vjust = -1,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  geom_text(
+    aes(label = percent(pct)),
+    hjust = 0,
+    family = "mono",
+    color = "orange3",
+    fontface = "bold"
+  ) +
+  facet_wrap(~ div, scales = "free_y") +
+  scale_y_discrete(
+    breaks = NULL
+  ) +
+  scale_x_continuous(
+    breaks = NULL,
+    limits = c(0, .3)
+  ) +
+  labs(
+    title = str_wrap(
+      "Share of conflicts that end with the following provisions",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data: Militarized Interstate Confrontation Endings, 1816-2014",
+      width = 50
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    strip.text = element_blank()
+  )
+saveit(1, 5)
+```
+
+```{r}
+#| fig-height: 3
+#| fig-width: 6
+
+m2 <- micend |>
+  select(baddefeat:nonstateaggr) 
+colnames(m2) <- c(
+  "Decisive Defeat",
+  "Regime Change",
+  "Concerns Non-state Allies"
+)
+
+m2 |>
+  pivot_longer(everything()) |>
+  group_by(name) |>
+  ct(value) |>
+  ungroup() |>
+  filter(value > 0) |>
+  ggplot() +
+  aes(pct, reorder(name, pct)) +
+  # geom_pointrange(
+  #   aes(xmin = 0, xmax = pct),
+  #   color = "navy"
+  # ) +
+  geom_col(
+    fill = "navy",
+    width = .25
+  ) +
+  geom_text(
+    aes(x = 0, label = name),
+    hjust = 0,
+    vjust = -1,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  geom_text(
+    aes(label = percent(pct)),
+    hjust = 0,
+    family = "mono",
+    color = "orange3",
+    fontface = "bold"
+  ) +
+  scale_y_discrete(
+    breaks = NULL
+  ) +
+  scale_x_continuous(
+    breaks = NULL,
+    limits = c(0, .08)
+  ) +
+  labs(
+    title = str_wrap(
+      "Share of conflicts with the following context variables",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data: Militarized Interstate Confrontation Endings, 1816-2014",
+      width = 50
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) 
+saveit(2, 3)
+```
+
+```{r}
+#| fig-height: 3.5
+#| fig-width: 6
+
+m3 <- micend |>
+  select(global:nonstate) 
+colnames(m3) <- c(
+  "Global Organizations",
+  "Regional Organizations",
+  "Individual Countries",
+  "Non-state Actors"
+)
+
+m3 |>
+  pivot_longer(everything()) |>
+  group_by(name) |>
+  ct(value) |>
+  ungroup() |>
+  filter(value > 0) |>
+  ggplot() +
+  aes(pct, reorder(name, pct)) +
+  # geom_pointrange(
+  #   aes(xmin = 0, xmax = pct),
+  #   color = "navy"
+  # ) +
+  geom_col(
+    fill = "navy",
+    width = .25
+  ) +
+  geom_text(
+    aes(x = 0, label = name),
+    hjust = 0,
+    vjust = -1,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  geom_text(
+    aes(label = percent(pct)),
+    hjust = 0,
+    family = "mono",
+    color = "orange3",
+    fontface = "bold"
+  ) +
+  scale_y_discrete(
+    breaks = NULL
+  ) +
+  scale_x_continuous(
+    breaks = NULL,
+    limits = c(0, .08)
+  ) +
+  labs(
+    title = str_wrap(
+      "Share of conflicts that end with mediation by the following actors",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data: Militarized Interstate Confrontation Endings, 1816-2014",
+      width = 50
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) 
+saveit(3, 3.5)
+```
+
+```{r}
+#| fig-height: 3.5
+#| fig-width: 6
+
+m4 <- micend |>
+  select(releaseaircraft:releasearms) 
+colnames(m4) <- c(
+  "Aircraft",
+  "Personnel",
+  "Shipping",
+  "Armaments"
+)
+
+m4 |>
+  pivot_longer(everything()) |>
+  group_by(name) |>
+  ct(value) |>
+  ungroup() |>
+  filter(value > 0) |>
+  ggplot() +
+  aes(pct, reorder(name, pct)) +
+  # geom_pointrange(
+  #   aes(xmin = 0, xmax = pct),
+  #   color = "navy"
+  # ) +
+  geom_col(
+    fill = "navy",
+    width = .25
+  ) +
+  geom_text(
+    aes(x = 0, label = name),
+    hjust = 0,
+    vjust = -1,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  geom_text(
+    aes(label = percent(pct)),
+    hjust = 0,
+    family = "mono",
+    color = "orange3",
+    fontface = "bold"
+  ) +
+  scale_y_discrete(
+    breaks = NULL
+  ) +
+  scale_x_continuous(
+    breaks = NULL,
+    limits = c(0, .1)
+  ) +
+  labs(
+    title = str_wrap(
+      "Share of conflicts that end with the release of the following seized items",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data: Militarized Interstate Confrontation Endings, 1816-2014",
+      width = 50
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) 
+saveit(4, 3.5)
+```
