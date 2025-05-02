@@ -338,3 +338,29 @@ m4 |>
   ) 
 saveit(4, 3.5)
 ```
+
+
+How many conflicts end with the same constellation of characteristics?
+
+```{r}
+micend |>
+  select(ceasefire:releasearms) |>
+  select(- mediatorname) |>
+  mutate(
+    withdrawal = ifelse(withdrawal > 0, 1, 0)
+  ) |>
+  group_by(
+    across(everything())
+  ) |>
+  count() |>
+  ungroup() |>
+  mutate(pct = n / sum(n)) |>
+  arrange(-n) |>
+  rowwise() |>
+  mutate(
+    endings = sum(
+      c_across(1:28)
+    )
+  )
+```
+

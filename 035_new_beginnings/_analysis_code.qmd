@@ -1,0 +1,331 @@
+---
+title: "New beginnings"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("skyblue1", "navy"),
+  diverging = c("steelblue", "white", "red")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here(
+      "035_new_beginnings",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+mie <- read_csv(
+  here(
+    "_data",
+    "mie-1.0.csv"
+  )
+)
+micend <- read_csv(
+  here(
+    "_data",
+    "micend-1.0.csv"
+  )
+)
+dt <- left_join(
+  mie |> select(micnum, ccode1, ccode2, styear),
+  micend |>
+    select(-c(endmonth, endday))
+)
+dt |> 
+  drop_na(endyear) -> dt
+```
+
+```{r}
+dt |>
+  mutate(
+    dyad = paste0(
+      pmin(ccode1, ccode2),
+      " - ",
+      pmax(ccode1, ccode2)
+    )
+  ) |>
+  group_by(micnum, dyad) |>
+  summarize(
+    styear = min(styear),
+    endyear = max(endyear),
+    across(
+      talks:releasearms,
+      unique
+    )
+  ) |>
+  group_by(dyad) |>
+  mutate(
+    durr = lead(styear, order_by = styear) - endyear
+  ) |>
+  select(
+    micnum:endyear,
+    durr,
+    everything()
+  ) -> dt
+```
+
+## Figures
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+tibble(
+  thr = c(999, 50, 25, 10, 5),
+  pct = map(
+    .x = thr,
+    .f = ~ mean(
+      ifelse(
+        is.na(dt$durr),
+        1000,
+        dt$durr
+      ) <= .x
+    ) 
+  ) |> unlist()
+) |>
+  mutate(
+    labs = c(
+      "Ever",
+      "50 years",
+      "25 years",
+      "10 years",
+      "5 years"
+    )
+  ) |>
+  ggplot() +
+  aes(reorder(labs, -thr), pct) +
+  geom_col(
+    fill = "navy"
+  ) +
+  geom_text(
+    aes(y = 0, label = percent(pct)),
+    family = "mono",
+    fontface = "bold",
+    color = "orange",
+    vjust = -1
+  ) +
+  labs(
+    title = str_wrap(
+      "How soon do pairs of countries face each other again after an ended confrontation?",
+      width = 37
+    ),
+    subtitle = 
+      "<p>Rate that countries fight again <i>ever</i>, within <i>50 years</i>,</p><p>within <i>25 years</i>, within <i>10 years</i>, and within <i>5 years</i>.</p>",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    plot.subtitle = ggtext::element_markdown()
+  ) +
+  scale_y_continuous(
+    labels = percent
+  )
+saveit(1)
+```
+
+```{r}
+dt <- dt |> select(-mediatorname, -nonstate)
+dt <- dt |>
+  mutate(
+    withdrawal = ifelse(
+      withdrawal > 0, 1, 0
+    )
+  )
+rhs <- paste0("~ ", paste0(
+  names(dt[, 8:ncol(dt)]),
+  collapse = " + "
+)) |> as.formula()
+library(mfx)
+tibble(
+  thr = c(999, 50, 25, 10, 5),
+  mod = map(
+    .x = thr,
+    .f = ~ logitmfx(
+      update(
+        rhs, durr ~ .
+      ),
+      data = dt |>
+        mutate(
+          durr = (ifelse(
+            is.na(durr),
+            1000, durr
+          ) <= .x)+0
+        ),
+      robust = T
+    )
+  )
+) -> mod_fits
+```
+
+
+
+
+```{r}
+mod_fits |>
+  mutate(
+    labs = c(
+      "Ever",
+      "50 years",
+      "25 years",
+      "10 years",
+      "5 years"
+    ) |>
+      factor(, levels = c(
+      "Ever",
+      "50 years",
+      "25 years",
+      "10 years",
+      "5 years"
+    )),
+    mf = map(
+      mod, ~ .x$mfxest |> 
+        as_tibble() |>
+        janitor::clean_names() |>
+        mutate(
+          terms = c(
+            "Ceasefire",
+            "Withdrawal",
+            "Reaffirmation",
+            "Demarcation",
+            "Future Arbitration",
+            "Future Agreements",
+            "Info Exchange",
+            "Disarm",
+            "New Institution",
+            "Refugee Cooperation",
+            "POW Exchange",
+            "Monitors",
+            "Territory Exchange",
+            "Citizen Travel",
+            "Future Mediation",
+            "Compensation",
+            "Policy Change",
+            "Decisive Defeat",
+            "Regime Change",
+            "Concerns Non-states",
+            "Global Organizations",
+            "Regional Organizations",
+            "Individual Countries",
+            "Aircraft",
+            "Personnel",
+            "Shipping",
+            "Armaments"
+          )
+        )
+    )
+  ) |>
+  unnest(mf) -> smry
+```
+
+```{r}
+#| fig-height: 8
+#| fig-width: 6
+
+smry |>
+  group_by(terms) |>
+  mutate(
+    lo = d_f_dx - 1.96 * std_err,
+    hi = d_f_dx + 1.96 * std_err,
+    terms = ifelse(
+      any(p_z < 0.05),
+      paste0("<b>", terms, "</b>"),
+      terms
+    )
+  ) |>
+  ggplot() +
+  aes(1, reorder(terms, abs(d_f_dx))) +
+  geom_tile(
+    aes(
+      fill = d_f_dx
+    ),
+    color = "black"
+  ) +
+  # geom_vline(
+  #   xintercept = 0,
+  #   color = "orange"
+  # ) +
+  # geom_pointrange(
+  #   aes(
+  #     alpha = ifelse(p_z <= 0.05, 1, 0)
+  #   ),
+  #   size = .2
+  # ) +
+  ggtext::geom_richtext(
+    aes(
+      label = 
+        paste0(round(100 * d_f_dx), "%") %>%
+        ifelse(
+          p_z < 0.05,
+          paste0("<b>", ., "</b>"),
+          .
+        )
+    ),
+    family = "mono",
+    size = 3,
+    fill = NA,
+    label.color = NA
+  ) +
+  facet_wrap(
+    ~ labs, nrow = 1
+  ) +
+  theme(
+    panel.grid.major = element_blank()
+  ) +
+  labs(
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    title = str_wrap(
+      "What factors predict confrontation recurrence?",
+      width = 37
+    ),
+    subtitle = paste0(
+      "<p>Cell entries are the predicted change in the probability</p>",
+      "<p>of conflict recurrence. Statistically significant</p>",
+      "<p>estimates are <b>in bold</b>. Estimates based on a logistic</p>",
+      "<p>regression model.</p>"
+    )
+  ) +
+  theme(
+    plot.subtitle = ggtext::element_markdown(),
+    axis.text.y = ggtext::element_markdown(),
+    legend.position = "none"
+  ) +
+  scale_x_continuous(
+    breaks = NULL
+  ) +
+  ggpal(
+    "diverging",
+    "fill"
+  )
+saveit(2, 8, 6)
+```
+
