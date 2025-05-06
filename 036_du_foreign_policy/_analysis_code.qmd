@@ -1,0 +1,334 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("skyblue1", "navy"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here(
+      "036_du_foreign_policy",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+Codebook: https://drive.google.com/file/d/1ga7g1WRCrAuy-PO6_73kAUyj20LNMPVM/view?usp=sharing
+
+```{r}
+## april 2025
+library(googlesheets4)
+gs4_deauth()
+a25 <- range_speedread("https://docs.google.com/spreadsheets/d/1npon5F_Gr40HQj8KVeHq_un7SOep4dzc6kjP0px7nLo/edit?usp=sharing")
+a25 <- a25 |> rename_all(str_to_lower)
+
+## october 2024
+o24 <- range_speedread("https://docs.google.com/spreadsheets/d/1nNkg14Bb9JG22jzIfjqEWuPf7ejzi_ELEvrUsNMNm6Q/edit?gid=1872116325#gid=1872116325")
+o24 <- o24 |> rename_all(str_to_lower)
+```
+
+Recode FP issues in April survey:
+
+```{r}
+a25 |>
+  transmute(
+    party = frcode(
+      q3 %in% 1:3 ~ "Democrat",
+      q3 == 4 ~ "Independent",
+      q3 %in% 5:7 ~ "Republican"
+    ),
+    across(
+      q32_1:q32_13,
+      ~ replace_na(.x, 0)
+    )
+  ) -> adt
+colnames(adt) <-
+  c(
+    "party",
+    "Cybersecurity",
+    "Ethnic Conflict",
+    "Climate Change",
+    "Human Rights",
+    "Migration",
+    "Terrorism",
+    "Trade",
+    "Regional Disintegration",
+    "Russian Agression",
+    "A Rising China",
+    "US Instability",
+    "WMD Proliferation",
+    "Other"
+  )
+```
+
+Recode issues in October survey:
+
+```{r}
+o24 |>
+  transmute(
+    party = frcode(
+      q3 %in% 1:3 ~ "Democrat",
+      q3 == 4 ~ "Independent",
+      q3 %in% 5:7 ~ "Republican"
+    ),
+    across(
+      q38_1:q38_13,
+      ~ replace_na(.x, 0)
+    )
+  ) -> odt
+colnames(odt) <-
+  c(
+    "party",
+    "Cybersecurity",
+    "Ethnic Conflict",
+    "Climate Change",
+    "Human Rights",
+    "Migration",
+    "Terrorism",
+    "Trade",
+    "Regional Disintegration",
+    "Russian Agression",
+    "A Rising China",
+    "US Instability",
+    "WMD Proliferation",
+    "Other"
+  )
+```
+
+
+Merge together
+
+```{r}
+bind_rows(
+  adt |> mutate(survey = "April 2025"),
+  odt |> mutate(survey = "October 2024")
+) -> dt
+```
+
+
+```{r}
+#| fig-height: 6
+#| fig-width: 6
+dt |>
+  pivot_longer(
+    - c(party, survey)
+  ) |>
+  group_by(name, survey) |>
+  mean_ci(value) |>
+  select(name, survey, mean) |>
+  pivot_wider(
+    values_from = mean,
+    names_from = survey
+  ) |>
+  ggplot() +
+  aes(y = reorder(name, `April 2025`)) +
+  geom_errorbarh(
+    aes(
+      xmin = `April 2025`,
+      xmax = `October 2024`
+    ),
+    height = 0,
+    color = "gray",
+    linewidth = 1
+  ) +
+  geom_point(
+    aes(
+      x = `April 2025`,
+      color = "April 2025"
+    ),
+    size = 3
+  ) +
+  geom_point(
+    aes(
+      x = `October 2024`,
+      color = "October 2024"
+    ),
+    size = 3
+  ) +
+  geom_text(
+    data = . %>%
+      mutate(
+        dif = `April 2025` - `October 2024`
+      ),
+    aes(
+      label = ifelse(
+        dif > 0,
+        paste0("+", round(dif*100)),
+        paste0(round(dif*100))
+      ),
+      x = (`April 2025` + `October 2024`) / 2
+    ),
+    color = "gray",
+    vjust = -.75,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  labs(
+    title = str_wrap(
+      "What foreign policy issues do students care about?",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data: October 2024 (n = 659) and April 2025 (n = 273) surveys of Denison University students",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = "Survey:"
+  ) +
+  ggpal(
+    "binary"
+  ) +
+  theme(
+    panel.grid.major.y = element_line(
+      linetype = 2,
+      color = "navy"
+    ),
+    panel.grid.major.x = element_blank()
+  ) +
+  scale_x_continuous(
+    labels = percent,
+    n.breaks = 10
+  )
+saveit(1, 6, 6)
+```
+
+```{r}
+#| fig-height: 6
+#| fig-width: 6
+
+dt |>
+  drop_na(party) |>
+  select(party, survey, Trade, `US Instability`) |>
+  pivot_longer(
+    -c(party, survey)
+  ) |>
+  group_by(party, survey, name) |>
+  summarize(
+    value = mean(value),
+    .groups = "drop"
+  ) |>
+  pivot_wider(
+    values_from = value,
+    names_from = survey
+  ) |>
+  janitor::clean_names() |>
+  ggplot() +
+  aes(y = party) +
+  facet_wrap(
+    ~ name,
+    ncol = 1
+  ) +
+  geom_errorbarh(
+    aes(
+      xmin = april_2025,
+      xmax = october_2024
+    ),
+    height = 0,
+    color = "gray",
+    linewidth = 1
+  ) +
+  geom_point(
+    aes(
+      x = april_2025,
+      color = "April 2025"
+    ),
+    size = 3
+  ) +
+  geom_point(
+    aes(
+      x = october_2024,
+      color = "October 2024"
+    ),
+    size = 3
+  ) +
+  geom_text(
+    data = . %>%
+      mutate(
+        dif = april_2025 - october_2024
+      ),
+    aes(
+      label = ifelse(
+        dif > 0,
+        paste0("+", round(dif*100)),
+        paste0(round(dif*100))
+      ),
+      x = (april_2025 + october_2024) / 2
+    ),
+    color = "gray",
+    vjust = -.75,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  labs(
+    title = str_wrap(
+      "Did partisanship condition shifts in student concerns about trade and domestic instability?",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data: October 2024 (n = 659) and April 2025 (n = 273) surveys of Denison University students",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = "Survey:"
+  ) +
+  ggpal(
+    "binary"
+  ) +
+  theme(
+    panel.grid.major.y = element_line(
+      linetype = 2,
+      color = "navy"
+    ),
+    panel.grid.major.x = element_blank(),
+    strip.text = element_text(
+      face = "bold.italic",
+      hjust = 0,
+      size = 14
+    )
+  ) +
+  scale_x_continuous(
+    labels = percent,
+    n.breaks = 10
+  )
+saveit(2, 6, 6)
+```
+
+Size of parties by survey?
+
+```{r}
+dt |>
+  group_by(survey, party) |>
+  count()
+```
+
