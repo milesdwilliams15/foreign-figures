@@ -67,7 +67,8 @@ a25 |>
     across(
       q32_1:q32_13,
       ~ replace_na(.x, 0)
-    )
+    ),
+    ft = q7_1
   ) -> adt
 colnames(adt) <-
   c(
@@ -84,7 +85,8 @@ colnames(adt) <-
     "A Rising China",
     "US Instability",
     "WMD Proliferation",
-    "Other"
+    "Other",
+    "ft"
   )
 ```
 
@@ -101,7 +103,8 @@ o24 |>
     across(
       q38_1:q38_13,
       ~ replace_na(.x, 0)
-    )
+    ),
+    ft = q17_1
   ) -> odt
 colnames(odt) <-
   c(
@@ -118,7 +121,8 @@ colnames(odt) <-
     "A Rising China",
     "US Instability",
     "WMD Proliferation",
-    "Other"
+    "Other",
+    "ft"
   )
 ```
 
@@ -330,5 +334,13 @@ Size of parties by survey?
 dt |>
   group_by(survey, party) |>
   count()
+```
+
+
+
+```{r}
+dt |>
+  group_by(survey, party) |>
+  mean_ci(ft)
 ```
 
