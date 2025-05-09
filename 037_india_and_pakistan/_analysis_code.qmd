@@ -128,6 +128,23 @@ saveit(1)
 ```
 
 ```{r}
+mie |>
+  filter(indpak != "Other") |>
+  group_by(styear) |>
+  count() |>
+  right_join(
+    tibble(styear = 1947:2014)
+  ) |>
+  mutate(
+    n = replace_na(n, 0)
+  ) |>
+  ungroup() |>
+  count(n > 0)
+```
+
+
+
+```{r}
 #| fig-height: 4
 #| fig-width: 6
 
@@ -196,6 +213,36 @@ mie |>
   )
 saveit(2)
 ```
+
+```{r}
+mie |>
+  filter(indpak != "Other") |>
+  group_by(styear) |>
+  summarize(
+    nl = sum(fatalmin1 + fatalmin2),
+    nh = sum(fatalmax1 + fatalmax2)
+  ) |>
+  right_join(
+    tibble(styear = 1947:2014)
+  ) |>
+  mutate(
+    nl = replace_na(nl, 0),
+    nh = replace_na(nh, 0)
+  ) |>
+  arrange(-nh) |>
+  group_by(
+    frcode(
+      nh >= 1000 ~ "1000+",
+      nh >= 100 ~ "100+",
+      nh >= 10 ~ "10+",
+      nh >= 1 ~ "> 0",
+      TRUE ~ "0"
+    )
+  ) |>
+  count(nh > 0)
+```
+
+
 
 ```{r}
 library(peacesciencer)
