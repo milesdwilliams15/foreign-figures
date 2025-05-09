@@ -1,0 +1,293 @@
+---
+title: "Indian and Pakistan"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("skyblue1", "navy"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here(
+      "037_india_and_pakistan",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+## Data
+
+```{r}
+## Get MIE data
+mie <- read_csv(
+  here(
+    "_data",
+    "mie-1.0.csv"
+  )
+)
+
+## get country names
+mie |>
+  mutate(
+    name1 = countrycode::countrycode(
+      ccode1, "cown", "country.name"
+    ),
+    name2 = countrycode::countrycode(
+      ccode2, "cown", "country.name"
+    )
+  ) -> mie
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+mie |>
+  mutate(
+    indpak = ifelse(
+      name1 %in% c("India", "Pakistan") &
+        name2 %in% c("India", "Pakistan"),
+      "India-Pakistan",
+      "Other"
+    )
+  ) -> mie
+  
+mie |>
+  filter(indpak != "Other") |>
+  group_by(styear) |>
+  count() |>
+  right_join(
+    tibble(styear = 1947:2014)
+  ) |>
+  mutate(
+    n = replace_na(n, 0)
+  ) |>
+  ggplot() +
+  aes(styear, n) +
+  geom_line(
+    color = "orange3"
+  ) +
+  stat_smooth(
+    se = F,
+    color = "navy",
+    method = "gam",
+    method.args = list(family = poisson)
+  ) +
+  labs(
+    title = str_wrap(
+      "Yearly frequency of militarized events between India and Pakistan, 1947-2014",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data: Militarized Interstate Events, International Conflict Data Project",
+      width = 55
+    ),
+    x = NULL,
+    y = "No. of Events",
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = seq(1945, 2015, by = 5)
+  ) +
+  scale_y_continuous(
+    n.breaks = 5
+  ) +
+  theme(
+    panel.grid.major.x = element_blank(),
+    axis.text.x = element_text(
+      angle = 45, 
+      hjust = 1
+    )
+  )
+saveit(1)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+mie |>
+  filter(indpak != "Other") |>
+  group_by(styear) |>
+  summarize(
+    nl = sum(fatalmin1 + fatalmin2),
+    nh = sum(fatalmax1 + fatalmax2)
+  ) |>
+  right_join(
+    tibble(styear = 1947:2014)
+  ) |>
+  mutate(
+    nl = replace_na(nl, 0),
+    nh = replace_na(nh, 0)
+  ) |>
+  ggplot() +
+  aes(styear) +
+  geom_ribbon(
+    aes(ymin = nl, ymax = nh),
+    color = "navy",
+    fill = "navy",
+    alpha = .4
+  ) +
+  ggrepel::geom_text_repel(
+    data = . %>%
+      slice_max(nh, n = 5) %>%
+      filter(nh != 2000),
+    aes(
+      y = nh,
+      label = comma(nh)
+    ),
+    family = "mono",
+    color = "navy",
+    fontface = "bold.italic",
+    nudge_x = 0,
+    nudge_y = 2000
+  ) +
+  labs(
+    title = str_wrap(
+      "Yearly minimum and maximum deaths from militarized events between India and Pakistan, 1947-2014",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data: Militarized Interstate Events, International Conflict Data Project",
+      width = 55
+    ),
+    x = NULL,
+    y = "Estimated Deaths",
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = seq(1945, 2015, by = 5)
+  ) +
+  scale_y_continuous(
+    n.breaks = 5,
+    labels = comma
+  ) +
+  theme(
+    panel.grid.major.x = element_blank(),
+    axis.text.x = element_text(
+      angle = 45, 
+      hjust = 1
+    )
+  )
+saveit(2)
+```
+
+```{r}
+library(peacesciencer)
+dy <- create_dyadyears() |>
+  mutate(
+    c1 = pmin(ccode1, ccode2),
+    c2 = pmax(ccode1, ccode2)
+  ) |>
+  distinct(c1, c2, year)
+
+mie |>
+  mutate(
+    c1 = pmin(ccode1, ccode2),
+    c2 = pmax(ccode1, ccode2)
+  ) -> mie
+
+mie |>
+  mutate(year = styear) |>
+  group_by(c1, c2, year) |>
+  summarize(
+    micn = length(unique(micnum)),
+    mien = n()
+  ) -> smie
+
+dt <- left_join(dy, smie) |>
+  mutate(
+    across(micn:mien, ~ replace_na(.x, 0)),
+    indpak = ifelse(
+      c1 %in% c(770, 750) &
+        c2 %in% c(770, 750),
+      "India-Pakistan",
+      "Other"
+    )
+  )
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  filter(year >= 1947, year <= 2014) |>
+  ggplot() +
+  aes(year, mien) +
+  geom_line(
+    aes(group = paste0(c1, "-", c2)),
+    color = "orange3",
+    linewidth = .1
+  ) +
+  geom_line(
+    data = . %>%
+      filter(indpak != "Other"),
+    color = "navy"
+  ) +
+  ggrepel::geom_text_repel(
+    data = . %>%
+      filter(indpak != "Other", year ==2002),
+    aes(
+      label = indpak
+    ),
+    nudge_x = 3,
+    nudge_y = 30,
+    color = "navy",
+    family = "mono",
+    fontface = "bold.italic"
+  ) +
+  labs(
+    title = str_wrap(
+      "Putting India and Pakistan's conflict history in context",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Data: Militarized Interstate Events, International Conflict Data Project",
+      width = 55
+    ),
+    x = NULL,
+    y = "No. of Events",
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = seq(1945, 2015, by = 5)
+  ) +
+  scale_y_continuous(
+    n.breaks = 10
+  ) +
+  theme(
+    panel.grid.major.x = element_blank(),
+    axis.text.x = element_text(
+      angle = 45, 
+      hjust = 1
+    )
+  )
+saveit(3)
+```
+
