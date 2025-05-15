@@ -1,0 +1,363 @@
+---
+title: "US Isolationist?"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("skyblue1", "navy"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here(
+      "038_us_isolationist",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+## Data
+
+```{r}
+## get dyad-year data and populate with variables
+library(peacesciencer)
+create_dyadyears() |>
+  add_cow_trade() |>
+  add_igos() |>
+  add_atop_alliance() |>
+  add_gml_mids() |>
+  add_nmc() -> dt
+
+## collapse to the country-year level
+dt |>
+  mutate(ccode = ccode1) |>
+  group_by(ccode, year) |>
+  summarize(
+    pairs = n(),
+    trade = sum(flow1 + flow2, na.rm = T),
+    igos = sum(dyadigos > 0, na.rm = T),
+    allies = sum(atop_defense, na.rm = T),
+    mids = sum(!is.na(init1)),
+    mil = median(milex1, na.rm = T)
+  ) -> dt
+  
+```
+
+## Figures
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(dt |> filter(year %in% 1870:2014)) +
+  aes(year, trade) +
+  geom_line(
+    aes(group = ccode),
+    color = "orange3",
+    linewidth = .1
+  ) +
+  geom_line(
+    data = . %>% filter(ccode == 2),
+    color = "navy",
+    linewidth = 1
+  ) +
+  scale_y_log10(
+    labels = ~ paste0(
+      "$", .x / 1000, " bil"
+    )
+  ) +
+  geom_ribbon(
+    data = . %>%
+      filter(ccode == 2, year %in% 1919:1939),
+    aes(ymin = 0, ymax = Inf),
+    alpha = 0.2
+  ) +
+  annotate(
+    "text",
+    x = 1919,
+    y = 2e06,
+    label = "'Inter-war Period'%->%''",
+    parse = T,
+    family = "mono",
+    hjust = 1
+  ) +
+  labs(
+    title = str_wrap(
+      "US trade over time versus the world",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Total trade in billions of current USD  (log-10 scale)",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  ggrepel::geom_text_repel(
+    data = . %>%
+      filter(ccode == 2, year == 1970),
+    aes(label = "United States"),
+    family = "mono",
+    color = "navy",
+    fontface = "bold.italic",
+    nudge_x = -5,
+    nudge_y = 1.25
+  ) +
+  ggrepel::geom_text_repel(
+    data = . %>%
+      ungroup() %>%
+      filter(year == 1880) %>%
+      slice_max(trade, n = 1),
+    aes(label = "Other Countries"),
+    family = "mono",
+    color = "orange3",
+    fontface = "bold.italic",
+    nudge_x = -5,
+    nudge_y = 1.25
+  )
+saveit(1)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(dt |> filter(year <= 2014)) +
+  aes(year, igos) +
+  geom_line(
+    aes(group = ccode),
+    color = "orange3",
+    linewidth = .1
+  ) +
+  geom_line(
+    data = . %>% filter(ccode == 2),
+    color = "navy",
+    linewidth = 1
+  ) +
+  geom_ribbon(
+    data = . %>%
+      filter(ccode == 2, year %in% 1919:1939),
+    aes(ymin = 0, ymax = Inf),
+    alpha = 0.2
+  ) +
+  annotate(
+    "text",
+    x = 1919,
+    y = 110,
+    label = "'Inter-war Period'%->%''",
+    parse = T,
+    family = "mono",
+    hjust = 1
+  ) +
+  labs(
+    title = str_wrap(
+      "Joint membership in at least one IGO",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Count of joint memberships in at least one IGO",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  ggrepel::geom_text_repel(
+    data = . %>%
+      filter(ccode == 2, year == 1992),
+    aes(label = "United States"),
+    family = "mono",
+    color = "navy",
+    fontface = "bold.italic",
+    nudge_x = -10,
+    nudge_y = 0
+  ) +
+  ggrepel::geom_text_repel(
+    data = . %>%
+      ungroup() %>%
+      filter(year == 1850) %>%
+      slice_max(igos, n = 1),
+    aes(label = "Other Countries"),
+    family = "mono",
+    color = "orange3",
+    fontface = "bold.italic",
+    nudge_x = -3,
+    nudge_y = 20
+  )
+saveit(2)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(dt |> filter(year <= 2018)) +
+  aes(year, allies) +
+  geom_line(
+    aes(group = ccode),
+    color = "orange3",
+    linewidth = .1
+  ) +
+  geom_line(
+    data = . %>% filter(ccode == 2),
+    color = "navy",
+    linewidth = 1
+  ) +
+  geom_ribbon(
+    data = . %>%
+      filter(ccode == 2, year %in% 1919:1939),
+    aes(ymin = 0, ymax = Inf),
+    alpha = 0.2
+  ) +
+  annotate(
+    "text",
+    x = 1919,
+    y = 45,
+    label = "'Inter-war Period'%->%''",
+    parse = T,
+    family = "mono",
+    hjust = 1
+  ) +
+  labs(
+    title = str_wrap(
+      "Alliances with other countries",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Count of defensive pledges with other countries",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  ggrepel::geom_text_repel(
+    data = . %>%
+      filter(ccode == 2, year == 1970),
+    aes(label = "United States"),
+    family = "mono",
+    color = "navy",
+    fontface = "bold.italic",
+    nudge_x = -5,
+    nudge_y = 10
+  ) +
+  ggrepel::geom_text_repel(
+    data = . %>%
+      ungroup() %>%
+      filter(year == 1850) %>%
+      slice_max(allies, n = 1),
+    aes(label = "Other Countries"),
+    family = "mono",
+    color = "orange3",
+    fontface = "bold.italic",
+    nudge_x = -3,
+    nudge_y = 15
+  )
+saveit(3)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(dt |> filter(year <= 2010)) +
+  aes(year, mids) +
+  geom_line(
+    aes(group = ccode),
+    color = "orange3",
+    linewidth = .1
+  ) +
+  geom_line(
+    data = . %>% filter(ccode == 2),
+    color = "navy",
+    linewidth = 1
+  ) +
+  geom_ribbon(
+    data = . %>%
+      filter(ccode == 2, year %in% 1919:1939),
+    aes(ymin = 0, ymax = Inf),
+    alpha = 0.2
+  ) +
+  annotate(
+    "text",
+    x = 1919,
+    y = 25,
+    label = "'Inter-war Period'%->%''",
+    parse = T,
+    family = "mono",
+    hjust = 1
+  ) +
+  labs(
+    title = str_wrap(
+      "Militarized interstate dispute initiations",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Count of MID initiations",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  ggrepel::geom_text_repel(
+    data = . %>%
+      filter(ccode == 2, year == 1980),
+    aes(label = "United States"),
+    family = "mono",
+    color = "navy",
+    fontface = "bold.italic",
+    nudge_x = -10,
+    nudge_y = 10
+  ) +
+  ggrepel::geom_text_repel(
+    data = . %>%
+      ungroup() %>%
+      filter(year == 1850) %>%
+      slice_max(igos, n = 1),
+    aes(label = "Other Countries"),
+    family = "mono",
+    color = "orange3",
+    fontface = "bold.italic",
+    nudge_x = -3,
+    nudge_y = 10
+  )
+saveit(4)
+```
+
+
+```{r}
+ggplot(dt) +
+  aes(year, mil) +
+  geom_line(
+    aes(
+      color = ifelse(ccode == 2, "US", "Others"),
+      group = ccode,
+      alpha = ifelse(ccode == 2, 1, 0)
+    )
+  ) +
+  scale_y_log10()
+```
+
