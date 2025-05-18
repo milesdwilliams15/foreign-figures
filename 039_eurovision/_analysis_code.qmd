@@ -1,0 +1,304 @@
+---
+title: "Eurovision"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("skyblue1", "navy"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here(
+      "039_eurovision",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+## Data
+
+Eurovision data source: https://github.com/Spijkervet/eurovision-dataset?tab=readme-ov-file
+
+```{r}
+read_csv(
+  here(
+    "_data",
+    "eurovision_votes.csv"
+  )
+) -> dt
+
+library(peacesciencer)
+
+create_dyadyears() |>
+  add_atop_alliance() |>
+  add_cow_trade() |>
+  add_igos() |>
+  add_gml_mids() |>
+  add_contiguity() -> ps
+
+dt |>
+  mutate(
+    ccode1 = from_country |>
+      str_to_upper() |>
+      countrycode::countrycode(
+        "iso2c", "cown"
+      ),
+    ccode2 = to_country |>
+      str_to_upper() |>
+      countrycode::countrycode(
+        "iso2c", "cown"
+      )
+  ) |>
+  left_join(ps) -> dt
+```
+
+## Figures
+
+```{r}
+#| fig-height: 8
+#| fig-width: 6
+
+dt |>
+  filter(round == "final") |>
+  group_by(to_country, year) |>
+  summarize(
+    points = sum(total_points),
+    .groups = "drop"
+  ) |>
+  group_by(year) |>
+  mutate(
+    winner = points == max(points)
+  ) |>
+  group_by(to_country) |>
+  summarize(
+    wins = sum(winner),
+    losses = sum(1 - winner),
+    pct = wins / (wins + losses),
+    .groups = "drop"
+  ) |>
+  mutate(
+    country = to_country |>
+      str_to_upper() |>
+      countrycode::countrycode(
+        "iso2c", "country.name"
+      )
+  ) |>
+  drop_na() |>
+  ggplot() +
+  aes(
+    y = reorder(country, pct)
+  ) +
+  geom_pointrange(
+    aes(
+      x = pct,
+      xmin = 0,
+      xmax = pct
+    ),
+    color = "navy"
+  ) +
+  geom_vline(
+    xintercept = .2,
+    linewidth = 20,
+    color = "orange3"
+  ) +
+  geom_text(
+    aes(
+      x = .185,
+      label = paste0(
+        wins, ":", losses
+      )
+    ),
+    hjust = 0,
+    family = "mono",
+    fontface = "bold",
+    color = "navy"
+  ) +
+  scale_x_continuous(
+    labels = ~ ifelse(
+      .x == .2,
+      "Wins:Losses",
+      paste0(.x * 100, "%")
+    ),
+    limits = c(0, .22)
+  ) +
+  labs(
+    title = str_wrap(
+      "Who are the winningest countries in Eurovision?",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Win rate in the final round, 1957-2023, excluding worldwide votes",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    panel.grid.major.y = element_blank()
+  )
+saveit(1, 8)
+```
+
+
+```{r}
+library(mgcv)
+library(sjPlot)
+
+mod <- dt |>
+  mutate(
+    Allies = ifelse(
+      atop_defense == 1,
+      "Yes", "No"
+    ),
+    Trade = flow1 + flow2,
+    IGOs = dyadigos,
+    Neighbors = ifelse(
+      conttype > 0, "Yes", "No"
+    ),
+    Conflict = ifelse(
+      gmlmidongoing == 1 &
+        hostlev >= 4,
+      "Yes", "No"
+    ),
+    dyad = paste0(
+      pmin(ccode1, ccode2),
+      " - ",
+      pmax(ccode1, ccode2)
+    ) |> as.factor() |> as.numeric()
+  ) |>
+  gam(
+    total_points ~ Allies + log(Trade + 1) +
+      log(IGOs) + Neighbors + Conflict +
+      s(year) + s(dyad, bs = "re"),
+    data = _,
+    family = quasipoisson
+  )
+summary(mod)
+```
+
+```{r}
+#| fig-height: 6
+#| fig-width: 6
+
+library(patchwork)
+
+plot_model(
+  model = mod,
+  type = "pred",
+  terms = "Trade"
+) +
+  scale_x_log10(
+    labels = dollar
+  ) +
+  labs(
+    title = "Trade",
+    x = "\nTrade in Millions (log-10)",
+    y = NULL
+  ) +
+  theme(
+    plot.title = element_text(hjust = .5)
+  ) -> p1
+
+plot_model(
+  model = mod,
+  type = "pred",
+  terms = "IGOs"
+) +
+  labs(
+    title = "IGOs",
+    x = "\nNo. of Joint IGOs",
+    y = NULL
+  ) +
+  theme(
+    plot.title = element_text(hjust = .5)
+  ) -> p2
+
+
+plot_model(
+  model = mod,
+  type = "pred",
+  terms = "Allies"
+) +
+  labs(
+    title = "Allies",
+    x = NULL,
+    y = NULL
+  ) +
+  theme(
+    plot.title = element_text(hjust = .5)
+  ) -> p3
+
+plot_model(
+  model = mod,
+  type = "pred",
+  terms = "Neighbors"
+) +
+  labs(
+    title = "Neighbors",
+    x = NULL,
+    y = NULL
+  ) +
+  theme(
+    plot.title = element_text(hjust = .5)
+  ) -> p4
+
+plot_model(
+  model = mod,
+  type = "pred",
+  terms = "Conflict"
+) +
+  labs(
+    title = "Conflict",
+    x = NULL,
+    y = NULL
+  ) +
+  theme(
+    plot.title = element_text(hjust = .5)
+  ) -> p5
+
+layout <- "
+AAABBB
+CCDDFF
+"
+p1 + p2 + p3 + p4 + p5 +
+  plot_annotation(
+    title = str_wrap(
+      "Predicted Eurovision points from one country to another",
+      width = 37
+    ),
+    subtitle = "Poisson model estimates",
+    caption = logo
+  ) +
+  plot_layout(
+    design = layout,
+    width = c(3, 3, 1, 1, 1)
+  ) &
+  theme(
+    panel.grid.major.x = element_blank()
+  )
+saveit(2, 6)
+```
+
