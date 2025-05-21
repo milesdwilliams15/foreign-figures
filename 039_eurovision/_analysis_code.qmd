@@ -9,6 +9,7 @@ format: html
 library(tidyverse)
 library(socsci)
 library(geomtextpath)
+library(ggrepel)
 library(coolorrr)
 library(here)
 set_palette(
@@ -37,9 +38,10 @@ saveit <- function(num = 1, ht = 4, wd = 6) {
 }
 ```
 
+
 ## Data
 
-Eurovision data source: https://github.com/Spijkervet/eurovision-dataset?tab=readme-ov-file
+Source: https://github.com/Spijkervet/eurovision-dataset?tab=readme-ov-file
 
 ```{r}
 read_csv(
@@ -49,15 +51,12 @@ read_csv(
   )
 ) -> dt
 
-library(peacesciencer)
+summary(dt)
+```
 
-create_dyadyears() |>
-  add_atop_alliance() |>
-  add_cow_trade() |>
-  add_igos() |>
-  add_gml_mids() |>
-  add_contiguity() -> ps
+These country labels suck. Let's fix them:
 
+```{r}
 dt |>
   mutate(
     ccode1 = from_country |>
@@ -70,52 +69,71 @@ dt |>
       countrycode::countrycode(
         "iso2c", "cown"
       )
-  ) |>
-  left_join(ps) -> dt
+  ) -> dt
+```
+
+Let's add some bilateral and unilateral variables:
+
+```{r}
+library(peacesciencer)
+
+create_dyadyears() |>
+  add_atop_alliance() |>
+  add_igos() |>
+  add_gml_mids() |>
+  add_cow_trade() |>
+  add_contiguity() -> ps
+
+dt |>
+  left_join(
+    ps
+  ) -> dt
 ```
 
 ## Figures
 
 ```{r}
-#| fig-height: 8
+#| fig-height: 7
 #| fig-width: 6
 
 dt |>
-  filter(round == "final") |>
-  group_by(to_country, year) |>
+  group_by(
+    year, round, ccode2
+  ) |>
   summarize(
     points = sum(total_points),
     .groups = "drop"
   ) |>
-  group_by(year) |>
+  group_by(year, round) |>
   mutate(
-    winner = points == max(points)
-  ) |>
-  group_by(to_country) |>
-  summarize(
-    wins = sum(winner),
-    losses = sum(1 - winner),
-    pct = wins / (wins + losses),
-    .groups = "drop"
+    winner = ifelse(
+      points == max(points),
+      1, 0
+    )
   ) |>
   mutate(
-    country = to_country |>
-      str_to_upper() |>
-      countrycode::countrycode(
-        "iso2c", "country.name"
-      )
+    country = countrycode::countrycode(
+      ccode2, "cown", "country.name"
+    )
   ) |>
   drop_na() |>
+  filter(round == "final") |>
+  group_by(country) |>
+  summarize(
+    pct = mean(winner),
+    tot = sum(winner),
+    los = sum(winner == 0),
+    .groups = "drop"
+  ) |>
   ggplot() +
-  aes(
-    y = reorder(country, pct)
-  ) +
+  aes(y = reorder(country, pct)) +
   geom_pointrange(
     aes(
       x = pct,
       xmin = 0,
       xmax = pct
     ),
+    width = .5,
     color = "navy"
   ) +
   geom_vline(
@@ -126,87 +144,72 @@ dt |>
   geom_text(
     aes(
       x = .185,
-      label = paste0(
-        wins, ":", losses
-      )
+      label = paste0(tot , ":", los)
     ),
-    hjust = 0,
     family = "mono",
     fontface = "bold",
-    color = "navy"
-  ) +
-  scale_x_continuous(
-    labels = ~ ifelse(
-      .x == .2,
-      "Wins:Losses",
-      paste0(.x * 100, "%")
-    ),
-    limits = c(0, .22)
+    color = "navy",
+    hjust = 0
   ) +
   labs(
     title = str_wrap(
-      "Who are the winningest countries in Eurovision?",
+      "Who does well in Eurovision?",
       width = 37
     ),
     subtitle = str_wrap(
-      "Win rate in the final round, 1957-2023, excluding worldwide votes",
+      "Average Eurovision points per country in the final round, 1957-2023",
       width = 55
     ),
     x = NULL,
     y = NULL,
     caption = logo
   ) +
+  scale_x_continuous(
+    labels = ~ ifelse(
+      .x != 0.2,
+      paste0(.x * 100, "%"),
+      "Wins:Losses"
+    ),
+    limits = c(0, .22)
+  ) +
   theme(
     panel.grid.major.y = element_blank()
   )
-saveit(1, 8)
-```
-
-
-```{r}
-library(mgcv)
-library(sjPlot)
-
-mod <- dt |>
-  mutate(
-    Allies = ifelse(
-      atop_defense == 1,
-      "Yes", "No"
-    ),
-    Trade = flow1 + flow2,
-    IGOs = dyadigos,
-    Neighbors = ifelse(
-      conttype > 0, "Yes", "No"
-    ),
-    Conflict = ifelse(
-      gmlmidongoing == 1 &
-        hostlev >= 4,
-      "Yes", "No"
-    ),
-    dyad = paste0(
-      pmin(ccode1, ccode2),
-      " - ",
-      pmax(ccode1, ccode2)
-    ) |> as.factor() |> as.numeric()
-  ) |>
-  gam(
-    total_points ~ Allies + log(Trade + 1) +
-      log(IGOs) + Neighbors + Conflict +
-      s(year) + s(dyad, bs = "re"),
-    data = _,
-    family = quasipoisson
-  )
-summary(mod)
+saveit(1, 7)
 ```
 
 ```{r}
 #| fig-height: 6
 #| fig-width: 6
 
-library(patchwork)
+library(sjPlot)
+library(mgcv)
+mod <- dt |>
+  mutate(
+    Trade = flow1 + flow2,
+    Neighbors = ifelse(conttype > 0, "Neighbors", "Not Neighbors"),
+    Conflict = ifelse(
+      gmlmidongoing == 1 & 
+        (hostlev >= 4),
+      "Conflict", "No Conflict"
+    ),
+    IGOs = replace_na(dyadigos, 0),
+    dyad = paste0(ccode1, "-", ccode2) |>
+      as.factor() |>
+      as.numeric()
+  ) |>
+  gam(
+    total_points ~ 
+      log(Trade + 1) + Neighbors + 
+      Conflict + log(IGOs + 1) +
+      s(year) +
+      s(dyad, bs = "re"),
+    data = _,
+    family = quasipoisson
+  ) 
 
 plot_model(
-  model = mod,
+  mod,
   type = "pred",
   terms = "Trade"
 ) +
@@ -223,36 +226,7 @@ plot_model(
   ) -> p1
 
 plot_model(
-  model = mod,
-  type = "pred",
-  terms = "IGOs"
-) +
-  labs(
-    title = "IGOs",
-    x = "\nNo. of Joint IGOs",
-    y = NULL
-  ) +
-  theme(
-    plot.title = element_text(hjust = .5)
-  ) -> p2
-
-
-plot_model(
-  model = mod,
-  type = "pred",
-  terms = "Allies"
-) +
-  labs(
-    title = "Allies",
-    x = NULL,
-    y = NULL
-  ) +
-  theme(
-    plot.title = element_text(hjust = .5)
-  ) -> p3
-
-plot_model(
-  model = mod,
+  mod,
   type = "pred",
   terms = "Neighbors"
 ) +
@@ -263,10 +237,24 @@ plot_model(
   ) +
   theme(
     plot.title = element_text(hjust = .5)
-  ) -> p4
+  ) -> p2
 
 plot_model(
-  model = mod,
+  mod,
+  type = "pred",
+  terms = "IGOs"
+) +
+  labs(
+    title = "IGOs",
+    x = "\nNo. of IGOs",
+    y = NULL
+  ) +
+  theme(
+    plot.title = element_text(hjust = .5)
+  ) -> p3
+
+plot_model(
+  mod,
   type = "pred",
   terms = "Conflict"
 ) +
@@ -277,27 +265,22 @@ plot_model(
   ) +
   theme(
     plot.title = element_text(hjust = .5)
-  ) -> p5
+  ) -> p4
 
-layout <- "
-AAABBB
-CCDDFF
-"
-p1 + p2 + p3 + p4 + p5 +
+library(patchwork)
+p1 + p2 + p3 + p4 +
   plot_annotation(
     title = str_wrap(
-      "Predicted Eurovision points from one country to another",
+      "Predicted votes from one country to the other",
       width = 37
     ),
-    subtitle = "Poisson model estimates",
+    subtitle = str_wrap(
+      "Predictions from a Poisson regression"
+    ),
     caption = logo
   ) +
   plot_layout(
-    design = layout,
-    width = c(3, 3, 1, 1, 1)
-  ) &
-  theme(
-    panel.grid.major.x = element_blank()
+    widths = c(2, 1)
   )
 saveit(2, 6)
 ```

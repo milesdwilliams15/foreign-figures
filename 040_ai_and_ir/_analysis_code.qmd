@@ -1,0 +1,173 @@
+---
+title: "AI and IR"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("skyblue1", "navy"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here(
+      "040_ai_and_ir",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+Codebook for April 2025: https://drive.google.com/file/d/1ga7g1WRCrAuy-PO6_73kAUyj20LNMPVM/view?usp=sharing
+
+Codebook for October 2024: https://drive.google.com/file/d/1iBQhQgVrHbjV5U_DWY7Ac-hGvt9DQFOG/view?usp=sharing
+
+```{r}
+## april 2025
+library(googlesheets4)
+gs4_deauth()
+a25 <- range_speedread("https://docs.google.com/spreadsheets/d/1npon5F_Gr40HQj8KVeHq_un7SOep4dzc6kjP0px7nLo/edit?usp=sharing")
+a25 <- a25 |> rename_all(str_to_lower)
+
+## october 2024
+o24 <- range_speedread("https://docs.google.com/spreadsheets/d/1nNkg14Bb9JG22jzIfjqEWuPf7ejzi_ELEvrUsNMNm6Q/edit?gid=1872116325#gid=1872116325")
+o24 <- o24 |> rename_all(str_to_lower)
+```
+
+The AI question is Q24 in April and Q33 in October.
+
+```{r}
+a25 |>
+  transmute(
+    "Do Background Research" = (!is.na(q24_1))+0,
+    "Summarize Reading" = (!is.na(q24_2))+0,
+    "Help with Writing" = (!is.na(q24_3))+0,
+    "Help with Editing" = (!is.na(q24_4))+0,
+    "Help with Coding" = (!is.na(q24_5))+0,
+    "Do Something Else" = (!is.na(q24_6))+0
+  ) |>
+  rowwise() |>
+  mutate(
+    "Any AI Use" = (sum(
+      c_across(everything()),
+      na.rm = T
+    ) > 0)+0
+  ) |> 
+  ungroup() |>
+  mutate(
+    survey = "April 2025"
+  ) -> dt1
+
+o24 |>
+  transmute(
+    "Do Background Research" = (!is.na(q33_1))+0,
+    "Summarize Reading" = (!is.na(q33_2))+0,
+    "Help with Writing" = (!is.na(q33_3))+0,
+    "Help with Editing" = (!is.na(q33_4))+0,
+    "Help with Coding" = (!is.na(q33_5))+0,
+    "Do Something Else" = (!is.na(q33_6))+0
+  ) |>
+  rowwise() |>
+  mutate(
+    "Any AI Use" = (sum(
+      c_across(everything()),
+      na.rm = T
+    ) > 0)+0
+  ) |> 
+  ungroup() |>
+  mutate(
+    survey = "October 2024"
+  ) -> dt2
+
+bind_rows(
+  dt1, dt2
+) -> dt
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  pivot_longer(-survey) |>
+  mutate(survey = factor(survey, levels = c("October 2024", "April 2025"))) |>
+  group_by(survey, name) |>
+  mean_ci(value) |>
+  filter(name != "Any AI Use") |>
+  ggplot() +
+  aes(mean, reorder(name, mean)) +
+  geom_path(
+    data = . %>%
+      mutate(
+        mean = ifelse(
+          survey == "April 2025" &
+            name != "Something Else",
+          mean - .01,
+          mean
+        )
+      ),
+    color = "gray",
+    linewidth = 1,
+    arrow = arrow(
+      type = "closed",
+      length = unit(.1, "in")
+    )
+  ) +
+  geom_point(
+    aes(color = survey),
+    size = 3
+  ) +
+  ggpal("binary") +
+  labs(
+    title = str_wrap(
+      "AI usage is up among Denison University Students",
+      width = 37
+    ),
+    x = NULL,
+    subtitle = "% Students saying they use AI to...",
+    y = NULL,
+    caption = logo,
+    color = NULL
+  ) +
+  geom_label(
+    aes(
+      x = 0.15,
+      y = 1.75,
+      label = "Results based on Oct. 2024 (n = 659) and\nApril 2025 (n = 273) student surveys."
+    ),
+    hjust = 0,
+    family = "mono",
+    size = 3
+  ) +
+  scale_x_continuous(
+    labels = percent
+  )
+saveit(1)
+```
+
