@@ -1,0 +1,288 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("skyblue1", "navy"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here(
+      "041_pope_power",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+I asked ChatGPT to help me find questions about foreign policy in the survey data. Here's the prompt I gave it:
+
+I'm giving you a pdf. It is a codebook from the 2024 ANES. Identify for me any and all questions that deal with attitudes toward foreign policy issues or positions and summarize them in a bulleted list.
+
+Here's what it gave me:
+
+## 🗒️ Answer
+
+The ANES 2024 Time Series Codebook includes several questions related to foreign policy attitudes and positions. Below is a summary of those questions:
+
+* **U.S. support for Ukraine**
+
+  * Attitudes toward giving weapons to help Ukraine fight Russia (FORPOL\_UKRAINE, FORPOL\_UKRAINESTR).
+
+* **Military aid to Israel**
+
+  * Favor or oppose U.S. military assistance to Israel and strength of that support (FORPOL\_ISRAEL, FORPOL\_ISRAELSTR).
+
+* **Humanitarian aid to Gaza**
+
+  * Favor or oppose U.S. humanitarian aid to Palestinians in Gaza and strength of that support (FORPOL\_GAZA, FORPOL\_GAZASTR).
+
+* **Protests against the war in Gaza**
+
+  * Approval of college campus protests against the war (FORPOL\_GAZAPROTEST, FORPOL\_GAZAPROTESTSTR).
+
+* **Middle East conflict alignment**
+
+  * Respondent’s alignment with Israelis or Palestinians (FORPOL\_ISRPAL, FORPOL\_ISRPALSTR).
+
+* **Perceived threats from foreign countries**
+
+  * How much of a threat respondents believe various countries pose to the U.S., including China, Russia, Mexico, Iran, Japan, and Israel (FRGNTHRT\_\[COUNTRY]).
+
+* **Foreign policy approval of President**
+
+  * Approval of Joe Biden’s handling of foreign relations (PRESAPP\_FRNPRES, PRESAPP\_FRNPRESST).
+
+* **U.S. military intervention globally**
+
+  * Willingness to use military force to solve international problems (USWORLD\_MILFORCE).
+
+* **U.S. isolationism**
+
+  * Agreement with the idea that the country would be better off “just staying home” (USWORLD\_USISOL, USWORLD\_USISOLSTR).
+
+* **Free trade agreements**
+
+  * Attitudes toward the U.S. making free trade agreements with other countries (FREETRADE\_AGRMT, FREETRADE\_AGRMTSTR).
+
+* **Worry about terrorism**
+
+  * Concern about a terrorist attack in the near future (TERROR\_TERRWORRY).
+
+## 🌐 Sources
+
+1. [electionstudies.org - User's Guide and Codebook to the ANES 2024 Pilot Study](https://electionstudies.org/anes_pilot_2024_userguidecodebook_20240319/)
+2. [electionstudies.org - 2024 Time Series Study - ANES](https://electionstudies.org/data-center/2024-time-series-study/)
+3. [electionstudies.org - 2024 Pilot Study - ANES](https://electionstudies.org/data-center/2024-pilot-study/)
+4. [digitalcommons.liberty.edu - experiences of midwest nursing faculty decisions to leave](https://digitalcommons.liberty.edu/cgi/viewcontent.cgi?article=7378&context=doctoral)
+5. [ncbi.nlm.nih.gov - 2024 International Congress on Integrative Medicine](https://pmc.ncbi.nlm.nih.gov/articles/PMC11047233/)
+6. [jamanetwork.com - Experiences of Individuals Who Were Physically Restrained](https://jamanetwork.com/journals/jamanetworkopen/fullarticle/2759276)
+
+
+Alright, read in the data and make some recodes. I won't look at all of these issues. I'll just pick out 3.
+
+```{r}
+
+## read in the data:
+dt <- read_csv(
+  here(
+    "_data",
+    "anes_timeseries_2024_csv_20250430.csv"
+  )
+)
+
+## Refine!
+dt |>
+  transmute(
+    catholic = ifelse(
+      V241422 == 2, 1, 0
+    ),
+    ukraine_aid = frcode(
+      V241400x %in% 5:7 ~ "Oppose",
+      V241400x == 4 ~ "Neutral",
+      V241400x %in% 1:3 ~ "Support"
+    ),
+    pal_aid = frcode(
+      V241406x %in% 5:7 ~ "Oppose",
+      V241406x == 4 ~ "Neutral",
+      V241406x %in% 1:3 ~ "Support"
+    ),
+    us_force = frcode(
+      V241313 == 5 ~ "Not at all",
+      V241313 == 4 ~ "A little",
+      V241313 == 3 ~ "Moderately",
+      V241313 == 2 ~ "Very",
+      V241313 == 1 ~ "Extremely"
+    )
+  ) -> sdt
+```
+
+
+## Figures
+
+First, just tabulate the share of the data that's catholic:
+
+```{r}
+sdt |>
+  ct(catholic)
+dim(sdt)
+```
+
+Now break down support for issues for everyone and compare Catholics to the average.
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+sm <- function(dt, var) {
+  dt |>
+    ct(!!enquo(var), show_na = F) -> all
+  dt |>
+    mutate(
+      catholic = ifelse(
+        catholic == 1,
+        "Catholic",
+        "Non-Catholic"
+      )
+    ) |>
+    group_by(catholic) |>
+    ct(!!enquo(var), show_na = F) -> grp
+  bind_rows(
+    all |> mutate(catholic = "Everyone"),
+    grp
+  )
+}
+
+sm(sdt, ukraine_aid) |>
+  ggplot() +
+  aes(pct, ukraine_aid) +
+  geom_line(
+    linewidth = 1,
+    color = "gray"
+  ) +
+  geom_point(
+    aes(color = catholic),
+    size = 3
+  ) +
+  ggpal() +
+  scale_x_continuous(
+    labels = percent,
+    n.breaks = 8
+  ) +
+  labs(
+    title = str_wrap(
+      "Catholics are not much different than the average person on giving weapons to Ukraine",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Do you favor or oppose giving weapons to Urkaine to fight Russia?",
+      width = 55
+    ),
+    x = "% Respondents",
+    y = NULL,
+    caption = logo,
+    color = NULL
+  )
+saveit(1)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+sm(sdt, pal_aid) |>
+  ggplot() +
+  aes(pct, pal_aid) +
+  geom_line(
+    linewidth = 1,
+    color = "gray"
+  ) +
+  geom_point(
+    aes(color = catholic),
+    size = 3
+  ) +
+  ggpal() +
+  scale_x_continuous(
+    labels = percent,
+    n.breaks = 8
+  ) +
+  labs(
+    title = str_wrap(
+      "Catholics are a bit more neutral than the average person on aid to Palestinians",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Do you favor or oppose giving humanitarian aid to Palestinians in the Gaza Strip?",
+      width = 55
+    ),
+    x = "% Respondents",
+    y = NULL,
+    caption = logo,
+    color = NULL
+  )
+saveit(2)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+sm(sdt, us_force) |>
+  ggplot() +
+  aes(pct, us_force) +
+  geom_line(
+    linewidth = 1,
+    color = "gray"
+  ) +
+  geom_point(
+    aes(color = catholic),
+    size = 3
+  ) +
+  ggpal() +
+  scale_x_continuous(
+    labels = percent,
+    n.breaks = 8
+  ) +
+  labs(
+    title = str_wrap(
+      "Catholics are not much different than the average person on using force to solve problems",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "How willing should the United States be to use military force to solve problems?",
+      width = 55
+    ),
+    x = "% Respondents",
+    y = NULL,
+    caption = logo,
+    color = NULL
+  )
+saveit(3)
+```
+
