@@ -1,0 +1,180 @@
+---
+title: "Unconstrained Leaders"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("skyblue1", "navy"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here(
+      "042_unconstrained_leaders",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(peacesciencer)
+
+## make a leader-year base dataset
+create_leaderyears(
+  standardize = "cow",
+  subset_years = 1875:2004
+) |>
+  ## add conflict data
+  add_gml_mids() |>
+  add_spells() |>
+  ## add leader data
+  add_lwuf() |>
+  ## add democracy data
+  add_democracy() -> dt
+
+```
+
+## Figures
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(year, theta2_mean) +
+  geom_smooth(
+    method = "gam",
+    color = "navy"
+  ) +
+  labs(
+    title = str_wrap(
+      "How willing are leaders to use force?",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Leader willings to use force based on Carter and Smith (2020), accessed using {peacesciencer}.",
+      width = 55
+    ),
+    x = NULL,
+    y = "Average Willingness",
+    caption = logo
+  ) 
+saveit(1)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+dt |>
+  mutate(
+    pcat = frcode( 
+      polity2 < -5 ~ "< -5",
+      polity2 %in% c(-5:5) ~ "-5:5",
+      polity2 > 5 ~ " > 5"
+    )
+  ) |>
+  drop_na(pcat) |>
+  ggplot() +
+  aes(year, theta2_mean, color = pcat) +
+  geom_smooth(
+    method = "gam"
+  ) +
+  ggpal() +
+  labs(
+    title = str_wrap(
+      "Are unconstrained leaders more willing to use force?",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Leader willings to use force based on Carter and Smith (2020), accessed using {peacesciencer}.",
+      width = 55
+    ),
+    x = NULL,
+    y = "Average Willingness",
+    caption = logo,
+    color = "Polity 2 Score:"
+  ) +
+  scale_y_continuous(
+    limits = range(dt$theta2_mean)
+  )
+saveit(2, 5)
+```
+
+
+```{r}
+library(mgcv)
+
+fit <- gam(
+  gmlmidonset_init ~ 
+    s(theta2_mean, polity2) +
+    poly(gmlmidinitspell, 3) +
+    s(leaderid, bs = "re"),
+  data = dt |> 
+    mutate(
+      leaderid = as.numeric(as.factor(leader))
+    ),
+  family = binomial
+)
+```
+
+
+```{r}
+summary(fit)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+library(sjPlot)
+plot_model(
+  fit,
+  type = "pred",
+  terms = c("theta2_mean", "polity2 [-7.5, 7.5]"),
+  ci.lvl = .834
+) +
+  labs(
+    title = str_wrap(
+      "Do constraints on leaders work?",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Predictions from a generalized additive logit with 83.4% confidence intervals",
+      width = 55
+    ),
+    x = expression(
+      "Willingness to Use Force "%->%''
+    ),
+    y = "% Chance of MID\nInitiation",
+    caption = logo,
+    color = "Polity 2 Score:"
+  )
+saveit(3, 5)
+```
+
