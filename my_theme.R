@@ -13,7 +13,7 @@ my_theme <- function() {
       plot.title.position = "plot",
       panel.grid.major = element_line(
         linewidth = 0.1,
-        color = "navy"
+        color = "gray50"
       ),
       plot.caption = ggtext::element_markdown(),
       axis.title.x = element_text(

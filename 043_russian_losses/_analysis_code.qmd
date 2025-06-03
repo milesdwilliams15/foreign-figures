@@ -1,0 +1,153 @@
+---
+title: "Russian Losses so Far"
+format: html
+---
+
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("skyblue1", "navy"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here(
+      "043_russian_losses",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(gsheet)
+dt <- gsheet2tbl("https://docs.google.com/spreadsheets/d/1bngHbR0YPS7XH1oSA1VxoL4R34z60SJcR3NxguZM9GI/edit#gid=0", sheetid="Synthetic")
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(Date) +
+  geom_line(
+    aes(y = Russia_Total, color = "Russia"),
+    linewidth = 1
+  ) +
+  geom_line(
+    aes(y = Ukraine_Total, color = "Ukraine"),
+    linewidth = 1
+  ) +
+  labs(
+    title = str_wrap(
+      "Total equipment losses for Russia and Ukriane",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      paste0("Estimated count of losses, 02.24.2022 -- 06.02.2025"),
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = "Total for..."
+  ) +
+  scale_y_continuous(
+    labels = comma
+  ) +
+  ggpal("binary")
+saveit(1)
+```
+
+```{r}
+#| fig-height: 6
+#| fig-width: 6
+
+dt |>
+  slice_max(Date, n = 1) |>
+  select(
+    matches(
+      "Aircraft|Infantry|Logistics|Armor|Antiair|Artillery"
+    ),
+    -ends_with("Capture")
+  ) |>
+  pivot_longer(
+    everything()
+  ) |>
+  separate(
+    col = name,
+    into = c("country", "equipment"),
+    sep = "_"
+  ) |>
+  ggplot() +
+  aes(value, reorder(equipment, value)) +
+  geom_line(
+    linewidth = 1,
+    color = "gray"
+  ) +
+  geom_point(
+    aes(color = country),
+    size = 3
+  ) +
+  geom_text_repel(
+    data = . %>%
+      filter(equipment == "Infantry"),
+    aes(label = country, color = country),
+    vjust = 1.5,
+    fontface = "bold",
+    family = "mono",
+    nudge_x = -500,
+    nudge_y = .5
+  ) +
+  ggpal("binary") +
+  labs(
+    title = str_wrap(
+      paste0(
+        "Total equipment losses as of ",
+        max(dt$Date)
+      ),
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: Oryx site scraped by @leedrake5"
+    ),
+    x = "Count of losses",
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    legend.position = ""
+  ) +
+  scale_x_continuous(
+    labels = comma,
+    breaks = seq(0, 7000, by = 1000)
+  )
+saveit(2)
+```
+
