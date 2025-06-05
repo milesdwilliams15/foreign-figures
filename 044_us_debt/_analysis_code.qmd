@@ -1,0 +1,224 @@
+---
+title: "US debt in global perspective"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("skyblue1", "navy"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here(
+      "044_us_debt",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+## Data
+
+```{r}
+gmd <- read_csv(
+  here("_data", "GMD.csv")
+)
+
+## Look only post WWII and up to the most recently
+## available date with data
+gmd <- gmd |>
+  drop_na(govdebt) |>
+  filter(year %in% 1946:2025)
+```
+
+## Figures
+
+```{r}
+#| fig-height: 6
+#| fig-width: 6
+gmd |>
+  ggplot() +
+  aes(year, asinh(govdef_GDP)) +
+  geom_line(
+    aes(group = countryname, color = "Others"),
+    linewidth = .1
+  ) +
+  geom_line(
+    data = . %>%
+      filter(countryname == "United States"),
+    aes(color = "United States"),
+    linewidth = 1
+  ) +
+  ggpal("binary") +
+  labs(
+    title = str_wrap(
+      "The unusually deep deficit of the United States",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: Global Macro Database (globalmacrodata.com)",
+      width = 55
+    ),
+    x = NULL,
+    y = "Deficit per GDP\n(asinh-transformed)",
+    caption = logo,
+    color = NULL
+  )
+saveit(1, 6)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+ggplot(gmd) +
+  aes(asinh(govdef_GDP), CurrencyCrisis) +
+  stat_smooth(
+    method = "glm",
+    method.args = list(family = binomial),
+    color = "navy"
+  ) +
+  labs(
+    title = str_wrap(
+      "Deficits predict currency crises",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: Global Macro Database (globalmacrodata.com)",
+      width = 55
+    ),
+    x = "Deficit per GDP\n(asinh-transformed)",
+    y = "Chance of a Currency Crisis\n(95% Confidence Intervals)",
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = percent
+  )
+saveit(2, 5)
+```
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+library(simqi)
+
+glm(
+  CurrencyCrisis ~ asinh(govdef_GDP),
+  data = gmd,
+  family = binomial
+) |>
+  sim_qi(
+    newdata = tibble(
+      govdef_GDP = c(
+        gmd |> filter(
+            year == 2025, 
+            countryname == "United States"
+          ) |> 
+            pull(govdef_GDP),
+        0,
+        -(gmd |> filter(
+            year == 2025, 
+            countryname == "United States"
+          ) |> 
+            pull(govdef_GDP))
+      )
+    ),
+    original_scale = F,
+    return_newdata = T
+  ) |>
+  group_by(govdef_GDP) |>
+  summarize(
+    est = mean(y),
+    lo = quantile(y, 0.025),
+    hi = quantile(y, 0.975)
+  ) |>
+  ggplot() +
+  aes(
+    x = c("Current Deficit\n(-$7.3 mil)",
+          "No Deficit",
+          "Imagined Surplus\n(+$7.3 mil)") |>
+      reorder(-est),
+    y = est,
+    ymin = lo,
+    ymax = hi
+  ) +
+  geom_pointrange() +
+  geom_text(
+    aes(
+      label = percent(est)
+    ),
+    hjust = -.5,
+    family = "mono"
+  ) +
+  labs(
+    title = str_wrap(
+      "Simulated chances of a currency crisis for the US",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Estimates based on a simple logit model",
+      width = 55
+    ),
+    x = NULL,
+    y = "% Chance",
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = percent
+  )
+saveit(3)
+```
+
+
+
+
+Has the US had a crisis?
+
+```{r}
+gmd |>
+  filter(countryname == "United States") |>
+  select(year, govdef_GDP, ends_with("Crisis")) |>
+  view()
+```
+
+
+Compared to other countries:
+
+```{r}
+gmd |>
+  group_by(countryname) |>
+  summarize(
+    across(ends_with("Crisis"), ~ sum(.x, na.rm = T))
+  ) |> 
+  view()
+```
+
+
+```{r}
+gmd |>
+  filter(year == 2025) |>
+  select(countryname, govdef_GDP) |>
+  arrange(govdef_GDP)
+```
+
