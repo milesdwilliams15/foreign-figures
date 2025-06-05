@@ -155,9 +155,9 @@ glm(
   ) |>
   ggplot() +
   aes(
-    x = c("Current Deficit\n(-$7.3 mil)",
+    x = c("Current Deficit\n(-7.3%)",
           "No Deficit",
-          "Imagined Surplus\n(+$7.3 mil)") |>
+          "Imagined Surplus\n(+7.3%)") |>
       reorder(-est),
     y = est,
     ymin = lo,
