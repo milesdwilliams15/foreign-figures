@@ -1,0 +1,258 @@
+---
+title: "Riots and repression"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("skyblue1", "navy"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here(
+      "045_riots_and_repression",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+
+## Data
+
+```{r}
+dt <- read_csv(
+  here("_data", "acled_aggregated_20250.csv")
+)
+
+dt <- janitor::clean_names(dt) |>
+  filter(event_year >= 2020)
+```
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+dt |>
+  group_by(sub_event_type) |>
+  summarize(
+    events = sum(events),
+    .groups = "drop"
+  ) |>
+  mutate(
+    pct = events / sum(events)
+  ) |>
+  arrange(events) |>
+  ggplot() +
+  aes(
+    x = pct,
+    y = paste0(
+      sub_event_type,
+      " (", comma(events), ")"
+    ) |>
+      str_wrap(15) |>
+      reorder(pct)
+  ) +
+  geom_col(
+    aes(x = 1),
+    fill = "gray"
+  ) +
+  geom_col(
+    fill = "navy"
+  ) +
+  geom_text(
+    aes(
+      label = percent(pct)
+    ),
+    hjust = -.2,
+    family = "mono",
+    color = "navy",
+    fontface = "bold"
+  ) +
+  scale_x_continuous(
+    breaks = NULL
+  ) +
+  labs(
+    title = str_wrap(
+      "ACLED protest and riot events, 2020 to present",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Counts are (in parentheses)"
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    axis.text.y = element_text(
+      hjust = 0
+    ),
+    panel.grid.major = element_blank()
+  )
+saveit(1, 5)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+dt |>
+  filter(country == "United States") |>
+  group_by(sub_event_type) |>
+  summarize(
+    events = sum(events),
+    .groups = "drop"
+  ) |>
+  mutate(
+    pct = events / sum(events)
+  ) |>
+  arrange(events) |>
+  ggplot() +
+  aes(
+    x = pct,
+    y = paste0(
+      sub_event_type,
+      " (", comma(events), ")"
+    ) |>
+      str_wrap(15) |>
+      reorder(pct)
+  ) +
+  geom_col(
+    aes(x = 1),
+    fill = "gray"
+  ) +
+  geom_col(
+    fill = "navy"
+  ) +
+  geom_text(
+    aes(
+      label = percent(pct)
+    ),
+    hjust = c(
+      rep(-.2, len = 4), 1.2
+    ),
+    family = "mono",
+    color = c(
+      rep("navy", len = 4), "white"
+    ),
+    fontface = "bold"
+  ) +
+  scale_x_continuous(
+    breaks = NULL
+  ) +
+  labs(
+    title = str_wrap(
+      "ACLED protest and riot events, 2020 to present (in the US)",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Counts are (in parentheses)"
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    axis.text.y = element_text(
+      hjust = 0
+    ),
+    panel.grid.major = element_blank()
+  )
+saveit(2, 5)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+dt |>
+  filter(country == "United States") |>
+  mutate(
+    type = ifelse(
+      sub_event_type == "Peaceful protest",
+      "Yes",
+      "No"
+    )
+  ) |>
+  group_by(event_year, type) |>
+  summarize(
+    events = sum(events),
+    .groups = "drop"
+  ) |>
+  group_by(event_year) |>
+  mutate(
+    pct = events / sum(events)
+  ) |>
+  filter(type != "No") |>
+ggplot() +
+  aes(
+    x = pct,
+    y = as.factor(event_year) |>
+      reorder(-event_year)
+  ) +
+  geom_col(
+    aes(x = 1),
+    fill = "gray"
+  ) +
+  geom_col(
+    fill = "navy"
+  ) +
+  geom_text(
+    aes(
+      label = percent(round(pct, 3))
+    ),
+    hjust = 1.2,
+    family = "mono",
+    color = "white",
+    fontface = "bold"
+  ) +
+  scale_x_continuous(
+    breaks = NULL
+  ) +
+  labs(
+    title = str_wrap(
+      "ACLED peaceful protests, 2020 to present (in the US)",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Counts are (in parentheses)"
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    axis.text.y = element_text(
+      hjust = 0
+    ),
+    panel.grid.major = element_blank()
+  )
+saveit(3, 5)
+```
+
