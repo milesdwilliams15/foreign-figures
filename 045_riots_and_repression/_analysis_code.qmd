@@ -207,14 +207,17 @@ dt |>
   ) |>
   group_by(event_year) |>
   mutate(
-    pct = events / sum(events)
+    pct = events / sum(events),
+    n = sum(events)
   ) |>
   filter(type != "No") |>
 ggplot() +
   aes(
     x = pct,
-    y = as.factor(event_year) |>
-      reorder(-event_year)
+    y = paste0(
+      event_year,
+      " (", comma(n), ")"
+    ) |> reorder(-event_year)
   ) +
   geom_col(
     aes(x = 1),
@@ -241,7 +244,7 @@ ggplot() +
       width = 37
     ),
     subtitle = str_wrap(
-      "Counts are (in parentheses)"
+      "Counts of total events are (in parentheses)"
     ),
     x = NULL,
     y = NULL,

@@ -1,0 +1,265 @@
+---
+title: "Israel's history of belligerence"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "steelblue"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here(
+      "046_israel_belligerence",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+
+```{r}
+cc <- function(cown) {
+  countrycode::countrycode(
+    cown, "cown", "country.name"
+  )
+}
+```
+
+Read in the data:
+
+```{r}
+read_csv(
+  here(
+    "_data",
+    "mie-1.0.csv"
+  )
+) -> dt
+```
+
+Filter to reciprocated events where the maximum hostility level of a whole confrontation is a 4 (use of force) and the reciprocated events rise to the level of a 4. This filtering scheme removes a lot of small events that never materialize into anything substantive and collateral damage (i.e., Israel accidentally attacks the US or the UK in an ongoing spat with Egypt or Jordan).
+
+```{r}
+dt |>
+  mutate(
+    dyad = paste0(
+      cc(pmin(ccode1, ccode2)),
+      "-",
+      cc(pmax(ccode1, ccode2))
+    )
+  ) |>
+  group_by(micnum, dyad) |>
+  mutate(
+    recip = any(sidea1 == 0 & hostlev >= 4) * 
+      (n() > 1),
+    maxhostlev = max(hostlev)
+  ) |>
+  ungroup() |>
+  filter(
+    recip == 1,
+    maxhostlev >= 4
+  ) -> dt
+```
+
+Add country names:
+
+```{r}
+dt |>
+  mutate(
+    name1 = countrycode::countrycode(
+      ccode1, "cown", "country.name"
+    ),
+    name2 = countrycode::countrycode(
+      ccode2, "cown", "country.name"
+    )
+  ) -> dt
+```
+
+Indicators for Israel dyads:
+
+```{r}
+dt |>
+  filter(styear >= 1948) |>
+  mutate(
+    islside = case_when(
+      name1 == "Israel" ~ "Initiator",
+      name2 == "Israel" ~ "Target",
+      TRUE ~ NA
+    ),
+    isl = ifelse(
+      name1 == "Israel" |
+        name2 == "Israel",
+      "Israel", "Others"
+    )
+  ) -> dt
+```
+
+## Figures
+
+```{r}
+dt |>
+  ct(isl, show_na = F)
+```
+
+```{r}
+dt |>
+  distinct(dyad) |> 
+  count()
+dt |> 
+  filter(
+    isl == "Israel"
+  ) |>
+  distinct(dyad) |>
+  count()
+
+8 / 215
+
+dt |>
+  ct(dyad) |>
+  arrange(-n)
+```
+
+
+
+```{r}
+dt |>
+  filter(isl == "Israel") |>
+  ct(islside)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+dt |>
+  filter(islside == "Initiator") |>
+  group_by(name2) |>
+  summarize(
+    n = n(),
+    isl_fat = sum(fatalmax1),
+    other_fat = sum(fatalmax2)
+  ) |>
+  arrange(-n) -> s1
+
+dt |>
+  filter(islside == "Target") |>
+  group_by(name1) |>
+  summarize(
+    n = n(),
+    isl_fat = sum(fatalmax2),
+    other_fat = sum(fatalmax1)
+  ) |>
+  arrange(-n) -> s2
+
+bind_rows(
+  s1 |> rename(name = name2) |>
+    mutate(isl = "Israel Initiates"),
+  s2 |> rename(name = name1) |>
+    mutate(isl = "Israel is Targeted")
+) |>
+  group_by(name) |>
+  mutate(
+    n = sum(n)
+  ) |>
+  ggplot() +
+    aes(
+      y = paste0(
+        name, " (n = ",
+        comma(n), ")"
+      ) |>
+        reorder(n)
+    ) +
+  geom_tile(
+    aes(
+      x = "Israeli\nDeaths",
+      fill = asinh(isl_fat)
+    ),
+    color = "black"
+  )+
+  geom_text(
+    aes(
+      x = "Israeli\nDeaths",
+      label = comma(isl_fat)
+    ),
+    color = "black",
+    family = "mono",
+    fontface = "bold"
+  )+
+  geom_tile(
+    aes(
+      x = "Competitor\nDeaths",
+      fill = asinh(other_fat)
+    ),
+    color = "black"
+  ) +
+  geom_text(
+    aes(
+      x = "Competitor\nDeaths",
+      label = comma(other_fat)
+    ),
+    color = "black",
+    family = "mono",
+    fontface = "bold"
+  )+
+  facet_wrap(
+    ~ isl
+  ) +
+  labs(
+    title = str_wrap(
+      "Fatalities suffered when Israel initiates or is the target of a militarized event",
+      width = 45
+    ),
+    subtitle = str_wrap(
+      "Source: Militarized Interstate Events Dataset, 1948-2014",
+      width = 65
+    ),
+    x = NULL,
+    y = NULL,
+    color = "Max. Fatalities for:",
+    caption = logo
+  ) +
+  ggpal("sequential", "fill") +
+  theme(
+    panel.grid.major = element_blank(),
+    legend.position = "",
+    axis.text.x = element_text(
+      face = "bold.italic"
+    ),
+    strip.text = element_text(
+      face = "bold.italic"
+    )
+  )
+saveit(1, 5, 7)
+```
+
+Quick thoughts:
+
+* Israel is among the most contentious countries in the world.
+* And it'd be wise not to tangle with Israel --- across the board, competitors suffer more fatalities than Israel, particularly when competitors go on the attack.
+* It's surprising that conflict with Iran makes no substantive appearance in the data, but this says more about the limitations with the MIE data than about the absence of conflict between these two nations.
+* The MIE data only documents direct confrontations --- not proxy conflicts.
+* Iranian proxies in Jordan and in Syria have been involved in conflicts with Israel, and both countries have supported different factions in the Syrian and Yemen civil wars.
+* But as direct conflicts become more common between Iran and Israel, it's a safe bet that the outcomes will look similar to the distribution of fatalities in Israel's other confrontations --- Iran will suffer more losses than Israel, particularly when Iran goes on the offensive.
