@@ -152,6 +152,24 @@ dt |>
 ```
 
 ```{r}
+dt |>
+  mutate(
+    fatmax = fatalmax1 + fatalmax2
+  ) |>
+  group_by(isl) |>
+  summarize(
+    fatmax = sum(fatmax)
+  ) |>
+  drop_na() |>
+  mutate(
+    pct = fatmax / sum(fatmax),
+    sum(fatmax)
+  )
+```
+
+
+
+```{r}
 #| fig-height: 5
 #| fig-width: 7
 dt |>
