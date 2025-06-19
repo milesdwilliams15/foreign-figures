@@ -1,0 +1,220 @@
+---
+title: "US war probability"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "steelblue"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here(
+      "047_us_war",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(peacesciencer)
+create_stateyears(
+  subset_years = 1946:2024,
+  system = "gw"
+) -> dt
+
+read_csv(
+  here("_data", "UcdpPrioConflict_v25_1.csv")
+) -> ucdp_acd
+
+## based on code Steve Miller used to clean his data:
+ucdp_acd %>%
+  select(conflict_id, year, gwno_a, gwno_a_2nd, gwno_b, gwno_b_2nd,
+         incompatibility, intensity_level, type_of_conflict:ep_end_date) -> ucdp_acd
+
+ucdp_acd %>%
+  mutate(gwno_a = strsplit(as.character(gwno_a), ",")) %>%
+  unnest(gwno_a) %>%
+  mutate(gwno_a_2nd = strsplit(as.character(gwno_a_2nd), ",")) %>%
+  unnest(gwno_a_2nd) %>%
+  mutate(gwno_b = strsplit(as.character(gwno_b), ",")) %>%
+  unnest(gwno_b) %>%
+  mutate(gwno_b_2nd = strsplit(as.character(gwno_b_2nd), ",")) %>%
+  unnest(gwno_b_2nd) -> ucdp_acd
+
+ucdp_acd %>%
+  mutate_at(vars("start_date", "start_date2", "ep_end_date"), ~lubridate::ymd(.)) %>%
+  mutate_at(vars("gwno_a", "gwno_a_2nd", "gwno_b", "gwno_b_2nd"), ~as.numeric(.)) -> ucdp_acd
+
+ucdp_acd %>%
+  mutate(type_of_conflict = case_when(
+    type_of_conflict == 1 ~ "extrasystemic",
+    type_of_conflict == 2 ~ "interstate",
+    type_of_conflict == 3 ~ "intrastate",
+    type_of_conflict == 4 ~ "II",
+  )) -> ucdp_acd
+
+ucdp_acd %>%
+  mutate(incompatibility = case_when(
+    incompatibility == 1 ~ "territory",
+    incompatibility == 2 ~ "government",
+    incompatibility == 3 ~ "both"
+  )) -> ucdp_acd
+
+## my bit:
+bind_rows(
+  ucdp_acd |>
+  select(
+    -gwno_a_2nd, 
+    -gwno_b_2nd
+  ) |>
+    rename(
+      gwcode1 = gwno_a,
+      gwcode2 = gwno_b
+    ),
+  ucdp_acd |>
+  select(
+    -gwno_a, 
+    -gwno_b
+  ) |>
+    rename(
+      gwcode1 = gwno_a_2nd,
+      gwcode2 = gwno_b_2nd
+    ),
+  ucdp_acd |>
+  select(
+    -gwno_a, 
+    -gwno_b_2nd
+  ) |>
+    rename(
+      gwcode1 = gwno_a_2nd,
+      gwcode2 = gwno_b
+    ),
+  ucdp_acd |>
+  select(
+    -gwno_a_2nd, 
+    -gwno_b
+  ) |>
+    rename(
+      gwcode1 = gwno_a,
+      gwcode2 = gwno_b_2nd
+    )
+) |>
+  mutate(
+    across(starts_with("gwcode"), as.numeric)
+  ) -> full_dt
+
+full_dt |>
+  distinct() -> final_dt
+
+final_dt |>
+  group_by(gwcode1, year, incompatibility, type_of_conflict, intensity_level) |>
+  summarize(
+    ac = length(unique(conflict_id))
+  ) -> final_dt
+```
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+final_dt |>
+  group_by(year) |>
+  summarize(
+    ac = sum(ac)
+  ) |>
+  ggplot() +
+  aes(year, ac) +
+  geom_line(color = "navy") +
+  geom_smooth(
+    method = "gam",
+    color = "orange",
+    se = F
+  ) +
+  labs(
+    title = str_wrap(
+      "Conflicts in the world, 1946-2024",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: UCDP/PRIO Armed Conflict Data"
+    ),
+    x = NULL,
+    y = "Conflicts",
+    caption = logo
+  )
+saveit(1, 5)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+final_dt |>
+  filter(
+    gwcode1 == 2
+  ) |>
+  group_by(year) |>
+  summarize(
+    ac = sum(ac)
+  ) |>
+  ggplot() +
+  aes(year, ac) +
+  geom_line(color = "navy") +
+  geom_smooth(
+    method = "gam",
+    color = "orange",
+    se = F
+  ) +
+  labs(
+    title = str_wrap(
+      "Conflicts in the world involving the United States, 1946-2024",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: UCDP/PRIO Armed Conflict Data"
+    ),
+    x = NULL,
+    y = "Conflicts",
+    caption = logo
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, 12, by = 2)
+  )
+saveit(2, 5)
+```
+
+```{r}
+final_dt |>
+  filter(gwcode1 == 2, year >= 2017) |>
+  ungroup() |>
+  ct(type_of_conflict)
+```
+
