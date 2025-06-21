@@ -1,0 +1,289 @@
+---
+title: "Misunderstanding Hegemony"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "steelblue"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here(
+      "048_hegemony",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+## Data
+
+I need to do my level best to replicate the security hierarchy measure proposed in Lake (2007). What I need:
+
+1. US Troop deployments: Total troops deployed in a country divided by that country's population then normalized to a 0-1 scale.
+
+2. US alliance dependence: 1 divided by the number of "independent alliances" --- alliances with other countries that are not also allied with the US. If the country isn't allied with the US at all, then its alliance dependence value is zero.
+
+Let's get the data:
+
+```{r}
+## alliances
+
+## 1. start with a dyadic alliance-year dataset
+library(peacesciencer)
+create_dyadyears(
+  subset_years = 1950:2014
+) |>
+  add_atop_alliance() -> ad
+
+## 2. Aggregate to get the alliance dependence measure
+ad |>
+  
+  # make indicator for a non-ally of the US
+  group_by(ccode2, year) |>
+  mutate(
+    nonus2 = max(
+      1 - atop_defense[ccode1 == 2],
+      na.rm = T
+    )
+  ) |> 
+  
+  # count up alliance independence per country
+  group_by(ccode1, year) |>
+  mutate(
+    us1 = max(
+      atop_defense[ccode2 == 2],
+      na.rm = T
+    )
+  ) |> 
+  filter(
+    ccode1 != 2 &
+      ccode2 != 2
+  ) |>
+  summarize(
+    us1 = max(us1),
+    sumind = sum(
+      nonus2 * atop_defense
+    ),
+    ai = case_when(
+      us1 == 0 ~ 0,
+      us1 == 1 & sumind > 0 ~ 1 / sumind,
+      us1 == 1 & sumind == 0 ~ 1
+    )
+  ) |>
+  ungroup() |>
+  transmute(
+    ccode = ccode1,
+    year, ai
+  ) -> sad
+
+## now troop data
+library(troopdata)
+
+td <- get_troopdata(
+  endyear = 2014
+)
+
+td |>
+  transmute(
+    region,
+    ccode, 
+    year,
+    troops = troops_ad
+  ) -> td
+
+cow_nmc |>
+  transmute(
+    ccode, year,
+    pop = 1000 * tpop,
+    milex
+  ) |>
+  right_join(
+    td
+  ) |>
+  filter(ccode != 2) |>
+  mutate(
+    ti = (troops / pop) / max(troops / pop, na.rm = T)
+  ) -> td
+
+## merge together
+fd <- left_join(
+  sad, td
+)
+
+## now use to populate a dataset of conflict onsets
+md <- read_csv(
+  here("_data", "mie-1.0.csv")
+)
+
+md |>
+  filter(hostlev >= 4, sidea1 == 1) |>
+  distinct(ccode1, styear) |>
+  transmute(
+    ccode = ccode1,
+    year = styear,
+    mic_init = 1
+  ) -> md
+
+fd |>
+  left_join(
+    md
+  ) |>
+  mutate(
+    mic_init = replace_na(mic_init, 0)
+  ) -> fd
+```
+
+Whew! That took some extra brain power to make those variables work.
+
+## Figures
+
+Okay, what does the distribution of these indexes look like?
+
+First I gotta make the combined index:
+
+```{r}
+fd |>
+  mutate(
+    secind = (ai + ti) / max(ai + ti, na.rm = T)
+  ) -> fd
+```
+
+
+Okay, now I can plot:
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+fd |>
+  select(year, ai, ti, secind) |>
+  pivot_longer(-year) |>
+  mutate(
+    name = frcode(
+      name == "secind" ~ "Combined",
+      name == "ai" ~ "Alliance",
+      name == "ti" ~ "Troops"
+    )
+  ) |>
+  ggplot() +
+  aes(year, value, color = name) +
+  stat_smooth(
+    method = "gam",
+    method.args = list(quasibinomial)
+  ) +
+  ggpal() +
+  labs(
+    title = str_wrap(
+      "Measures of US security hierarchy from 1950 to 2014",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Indexes based on Lake (2007)"
+    ),
+    x = NULL,
+    y = "Mean Hierarchy",
+    caption = logo,
+    color = "Index"
+  ) +
+  theme(
+    legend.title.position = "top",
+    legend.title = element_text(
+      hjust = .5
+    )
+  )
+saveit(1, 5)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+ggplot(fd) +
+  aes(secind, milex / 1e06) +
+  stat_smooth(
+    method = "glm",
+    method.args = list(family = quasipoisson),
+    level = .834,
+    color = "navy"
+  ) +
+  scale_y_continuous(
+    labels = ~ paste0("$", .x, " mil")
+  ) +
+  labs(
+    title = str_wrap(
+      "Security subordination to the US predicts lower military spending",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Predicted defense spending using a pooled psuedo-Poisson model. 83.5% CIs shown.",
+      width = 55
+    ),
+    x = "Security Index",
+    y = NULL,
+    caption = logo
+  )
+saveit(2, 5)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+ggplot(fd) +
+  aes(secind, mic_init) +
+  stat_smooth(
+    method = "glm",
+    method.args = list(family = binomial),
+    level = .834,
+    color = "navy"
+  ) +
+  scale_y_continuous(
+    labels = percent
+  ) +
+  labs(
+    title = str_wrap(
+      "Security subordination to the US predicts lower conflict propensity",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Predicted chance of conflict initiation using a pooled logit model. 83.5% CIs shown.",
+      width = 55
+    ),
+    x = "Security Index",
+    y = NULL,
+    caption = logo
+  )
+saveit(3, 5)
+```
+
+
+Notes:
+
+* Consistent with Lake (2007), US hegemony predicts both lower military spending by subordinates and lower propensity to initiate international conflicts.
+* But US hegemony is on the decline, and has been since the beginning of the Cold War. 
+* This might be one explanation for the current increase in global conflict --- the less subordinate countries are to a security hegemon, the more they take their own security into their own hands, and the more conflict we see in the world as a result.
+* Case in point is the current posture of America's NATO allies. They now doubt that the US is a reliable guarantor of their security, so they are ramping up military spending. 
+* The point of being a hegemon, of bearing the security burden of other countries, is to ensure that the world remains a more peaceful place. The reality of a world where our allies "pay up" is one where the US has less dominance and international conflict is more common.
