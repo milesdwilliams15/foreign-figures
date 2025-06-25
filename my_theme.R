@@ -16,13 +16,22 @@ my_theme <- function() {
         color = "gray50"
       ),
       plot.caption = ggtext::element_markdown(),
+      plot.caption.position = "plot",
       axis.title.x = element_text(
         hjust = .5,
-        size = 12
+        size = 12,
+        face = "bold"
       ),
       axis.title.y = element_text(
         hjust = .5,
-        size = 12
+        size = 12,
+        face = "bold"
+      ),
+      plot.subtitle = element_text(
+        face = "bold"
+      ),
+      axis.text = element_text(
+        face = "bold"
       )
     ) 
 }

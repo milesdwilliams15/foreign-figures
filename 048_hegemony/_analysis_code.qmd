@@ -230,7 +230,7 @@ ggplot(fd) +
     color = "navy"
   ) +
   scale_y_continuous(
-    labels = ~ paste0("$", .x, " mil")
+    labels = ~ paste0("$", comma(.x), " bil")
   ) +
   labs(
     title = str_wrap(

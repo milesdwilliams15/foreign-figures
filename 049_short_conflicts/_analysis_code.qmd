@@ -1,0 +1,238 @@
+---
+title: "Most Conflicts Are Short-lived"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "steelblue"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 6) {
+  ggsave(
+    here(
+      "049_short_conflicts",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+read_csv(
+  here(
+    "_data",
+    "mic-conf-1.0.csv"
+  )
+) -> dd
+```
+
+
+```{r}
+dd |>
+  mutate(
+    missingday = ifelse(
+      stday == -9 | endday == -9,
+      1, 0
+    ),
+    stday = ifelse(stday == -9, 1, stday),
+    endday = ifelse(endday == -9, 1, endday),
+    sdate = paste0(styear, "-", stmon, "-", stday) |>
+      ymd(),
+    edate = paste0(endyear, "-", endmon, "-", endday) |>
+      ymd(),
+    dur = edate - sdate
+  ) -> dd
+```
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+ggplot(dd) +
+  aes(dur) +
+  geom_density(
+    fill = "orange",
+    color = "navy"
+  ) +
+  geom_vline(
+    aes(
+      xintercept = quantile(dur, 0.8)
+    ),
+    linewidth = 1
+  ) +
+  annotate(
+    "text",
+    x = quantile(dd$dur, 0.8),
+    y = 0.005,
+    label = "''%<-%' 80% are shorter than 214 days'",
+    parse = T,
+    hjust = 0,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  labs(
+    title = str_wrap(
+      "How many days do international conflicts last?",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: Militarized Interstate Confrontations Dataset, 1816-2014",
+      width = 55
+    ),
+      x = "Years",
+      y = "Density",
+      caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = seq(0, 8000, by = 5 * 365),
+    labels = seq(0, 20, by = 5)
+  ) 
+saveit(1)
+```
+
+```{r}
+mean(dd$dur <= 12)
+```
+
+```{r}
+#| fig-height: 3
+#| fig-width: 6
+dd |>
+  mutate(
+    hostlev = frcode(
+      hostlev == 1 ~ "No militarized action",
+      hostlev == 2 ~ "Threat to use force",
+      hostlev == 3 ~ "Display of force",
+      hostlev == 4 ~ "Use of force",
+      hostlev == 5 ~ "War"
+    )
+  ) |>
+  ct(hostlev) |>
+  ggplot() +
+  aes(
+    x = pct,
+    y = hostlev
+  ) +
+  geom_col(
+    fill = "navy",
+    width = .75
+  ) +
+  labs(
+    title = str_wrap(
+      "The highest hostility level acheived in international conflicts",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: Militarized Interstate Confrontations Dataset, 1816-2014",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    labels = percent,
+    breaks = seq(0, 1, by = 0.05)
+  )
+saveit(2, 3)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+dd |>
+  mutate(
+    fatalcat = frcode(
+      fatalmax < 10 ~ "< 10",
+      fatalmax %in% 10:99 ~ "10-99",
+      fatalmax %in% 100:999 ~ "100-999",
+      fatalmax %in% 1000:9999 ~ "1,000-9,999",
+      fatalmax %in% 10000:99999 ~ "10,000-99,999",
+      fatalmax %in% 100000:999999 ~ "100,000-999,999",
+      fatalmax >= 1000000 ~ "1 million +"
+    )
+  ) |>
+  ct(fatalcat) |>
+  ggplot() +
+  aes(x = fatalcat, y = pct) +
+  geom_col(
+    fill = "navy",
+    width = .75
+  ) +
+  geom_text(
+    aes(
+      label = (round(pct, 3)) |> percent()
+    ),
+    vjust = -1.1,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  labs(
+    title = str_wrap(
+      "How many battle deaths by conflict's end?",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: Militarized Interstate Confrontations Dataset, 1816-2014",
+      width = 55
+    ),
+      x = "Maximum Estimated Fatalities",
+      y = NULL,
+      caption = logo
+  ) +
+  theme(
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1
+    ),
+    panel.grid.major.x = element_blank()
+  ) +
+  scale_y_continuous(
+    limits = 0:1,
+    labels = percent
+  )
+saveit(3)
+```
+
+```{r}
+ggplot(dd) +
+  aes(sdate, rank(dur)) +
+  geom_point() +
+  geom_smooth(method = "gam")
+```
+
+```{r}
+ggplot(dd) +
+  aes(sdate, rank(fatalmax)) +
+  geom_point() +
+  geom_smooth(method = "gam") 
+
+```
+
