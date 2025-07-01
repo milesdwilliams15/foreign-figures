@@ -1,0 +1,176 @@
+---
+title: "Global Debt Crisis"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "steelblue"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 6) {
+  ggsave(
+    here(
+      "050_global_debt",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(globalmacrodata)
+dd <- gmd(
+  variables = c("rGDP_USD", "govdebt", "govdebt_GDP", "SovDebtCrisis")
+) |> janitor::clean_names()
+
+dd <- dd |>
+  filter(year %in% 1946:2024)
+```
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+dd |>
+  group_by(year) |>
+  summarize(
+    Debt = sum((govdebt_gdp / 100) * r_gdp_usd, na.rm = T) * 1e06,
+    GDP = sum(r_gdp_usd, na.rm = T) * 1e06
+  ) |>
+  pivot_longer(-year) |>
+  ggplot() +
+  aes(year, value, color = name) +
+  geom_point(alpha = .5) +
+  geom_labelsmooth(
+    aes(label = name),
+    linewidth = 1,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  labs(
+    title = str_wrap(
+      "The narrowing gap between global GDP and government debt",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: Global Macro Dataset"
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = ~ paste0(
+      "$", .x / 1e12, " tril"
+    )
+  ) +
+  theme(
+    legend.position = ""
+  ) +
+  ggpal("binary")
+saveit(1)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+dd |>
+  group_by(year) |>
+  summarize(
+    debt = sum((govdebt_gdp / 100) * r_gdp_usd, na.rm = T) * 1e06,
+    gdp = sum(r_gdp_usd, na.rm = T) * 1e06
+  ) |>
+  ggplot() +
+  aes(year, debt / gdp) +
+  geom_point(alpha = .5, color = "navy") +
+  geom_labelsmooth(
+    label = "Debt as a % of GDP",
+    linewidth = 1,
+    color = "navy",
+    hjust = .7,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  labs(
+    title = str_wrap(
+      "The narrowing gap between global GDP and government debt",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: Global Macro Dataset"
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = percent
+  ) 
+saveit(2)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+dd |>
+  group_by(year) |>
+  summarize(
+    rate = mean(sov_debt_crisis, na.rm = T)
+  ) |> drop_na() |>
+  ggplot() +
+  aes(year, rate) +
+  geom_point(color = "orange3", alpha = .5) +
+  geom_labelsmooth(
+    label = "Debt Crisis Rate",
+    color = "orange3",
+    family = "mono",
+    fontface = "bold",
+    linewidth = 1,
+    method = "gam",
+    method.args = list(family = quasibinomial)
+  ) +
+  labs(
+    title = str_wrap(
+      "Are sovereign debt crises a crisis?",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: Global Macro Dataset"
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = percent
+  )
+saveit(3)
+```
+

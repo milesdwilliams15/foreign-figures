@@ -117,7 +117,22 @@ saveit(1)
 ```
 
 ```{r}
+## duration of Israel-Iran war
 mean(dd$dur <= 12)
+
+## duration of Russia-Ukraine war
+mean(dd$dur <= 11 * 365)
+
+dd |>
+  group_by(hostlev) |>
+  summarize(
+    lomin = min(fatalmin),
+    himin = min(fatalmax),
+    lomed = median(fatalmin),
+    himed = median(fatalmax),
+    lomax = max(fatalmin),
+    himax = max(fatalmax)
+  )
 ```
 
 ```{r}
