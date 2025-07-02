@@ -1,0 +1,296 @@
+---
+title: "BoP in Europe"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "steelblue"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 6) {
+  ggsave(
+    here(
+      "051_bop_in_europe",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(peacesciencer)
+create_stateyears() |>
+  add_nmc() |>
+  add_gwcode_to_cow() -> dt
+
+dt |>
+  left_join(
+    gw_sdp_gdp
+  ) -> dt
+
+dt |>
+  mutate(
+    region = countrycode::countrycode(
+      ccode, "cown", "continent"
+    )
+  ) -> dt
+
+table(dt$region)
+
+dt |>
+  filter(
+    region == "Europe"
+  ) -> fd
+
+table(fd$statenme)
+
+fd |>
+  filter(
+    year == 2015
+  ) -> fd
+
+fd |>
+  mutate(
+    milex = replace_na(milex, 0)
+  ) -> fd
+
+
+fd |>
+  drop_na() -> fd
+```
+
+## Figures
+
+```{r}
+#| fig-height: 6
+#| fig-width: 6
+
+fd |>
+  arrange(milex) |>
+  mutate(row = 1:n()) |>
+  ggplot() +
+  aes(y = reorder(str_wrap(statenme, 15), milex)) +
+  geom_tile(
+    aes(
+      x = "Military\nSpending",
+      fill = milex
+    ),
+    color = "gray10"
+  ) +
+  geom_text(
+    aes(
+      x = "Military\nSpending",
+      y = reorder(str_wrap(statenme, 15), milex),
+      label = paste0(
+        "$", round(milex / 1e06, 1), " bil"
+      )
+    ),
+    family = "mono",
+    fontface = "bold",
+    size = 3
+  ) +
+  geom_tile(
+    aes(
+      x = "Share",
+      fill = milex
+    ),
+    color = "gray10"
+  ) +
+  geom_text(
+    aes(
+      x = "Share",
+      y = reorder(str_wrap(statenme, 15), milex),
+      label = percent(round(milex / sum(milex), 2))
+    ),
+    family = "mono",
+    fontface = "bold",
+    size = 3
+  ) +
+  facet_wrap(
+    ~ row < 19,
+    scales = "free_y"
+  ) +
+  ggpal("sequential", "fill") +
+  theme(
+    strip.text = element_blank(),
+    legend.position = "",
+    panel.grid.major = element_blank()
+  ) +
+  labs(
+    title = str_wrap(
+      "Distribution of military expentitures among European countries as of 2015",
+      width = 37
+    ),
+    subtitle = "Source: CoW National Military Capabilities, 6.0",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(1, 6)
+```
+
+
+
+```{r}
+#| fig-height: 6
+#| fig-width: 6
+
+fd |>
+  arrange(cinc) |>
+  mutate(row = 1:n()) |>
+  ggplot() +
+  aes(y = reorder(str_wrap(statenme, 15), cinc)) +
+  geom_tile(
+    aes(
+      x = "CINC",
+      fill = cinc
+    ),
+    color = "gray10"
+  ) +
+  geom_text(
+    aes(
+      x = "CINC",
+      y = reorder(str_wrap(statenme, 15), cinc),
+      label = round(cinc, 3)
+    ),
+    family = "mono",
+    fontface = "bold",
+    size = 3
+  ) +
+  geom_tile(
+    aes(
+      x = "Share",
+      fill = cinc
+    ),
+    color = "gray10"
+  ) +
+  geom_text(
+    aes(
+      x = "Share",
+      y = reorder(str_wrap(statenme, 15), cinc),
+      label = percent(round(cinc / sum(cinc), 2))
+    ),
+    family = "mono",
+    fontface = "bold",
+    size = 3
+  ) +
+  facet_wrap(
+    ~ row < 19,
+    scales = "free_y"
+  ) +
+  ggpal("sequential", "fill") +
+  theme(
+    strip.text = element_blank(),
+    legend.position = "",
+    panel.grid.major = element_blank()
+  ) +
+  labs(
+    title = str_wrap(
+      "Balance of power (CINC) among European countries as of 2015",
+      width = 37
+    ),
+    subtitle = "Source: CoW National Military Capabilities, 6.0",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(2, 6)
+```
+
+
+```{r}
+#| fig-height: 6
+#| fig-width: 6
+
+fd |>
+  arrange(sdpest) |>
+  mutate(
+    sdpest = exp(sdpest)
+  ) |>
+  mutate(row = 1:n()) |>
+  ggplot() +
+  aes(y = reorder(str_wrap(statenme, 15), sdpest)) +
+  geom_tile(
+    aes(
+      x = "SDP",
+      fill = sdpest
+    ),
+    color = "gray10"
+  ) +
+  geom_text(
+    aes(
+      x = "SDP",
+      y = reorder(str_wrap(statenme, 15), sdpest),
+      label = paste0(
+        "$", round(sdpest / 1e12, 1), " tril"
+      )
+    ),
+    family = "mono",
+    fontface = "bold",
+    size = 3
+  ) +
+  geom_tile(
+    aes(
+      x = "Share",
+      fill = sdpest
+    ),
+    color = "gray10"
+  ) +
+  geom_text(
+    aes(
+      x = "Share",
+      y = reorder(str_wrap(statenme, 15), sdpest),
+      label = percent(round(sdpest / sum(sdpest), 2))
+    ),
+    family = "mono",
+    fontface = "bold",
+    size = 3
+  ) +
+  facet_wrap(
+    ~ row < 19,
+    scales = "free_y"
+  ) +
+  ggpal("sequential", "fill") +
+  theme(
+    strip.text = element_blank(),
+    legend.position = "",
+    panel.grid.major = element_blank()
+  ) +
+  labs(
+    title = str_wrap(
+      "Balance of latent power (SDP) among European countries as of 2015",
+      width = 37
+    ),
+    subtitle = "Source: Anders, Fariss, and Markowitz (2020)",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(3, 6)
+```
+
+As the threat Russia poses to Europe increases, the US is retreating, and Germany will likely assume the mantle of guarantor of European security --- a scenario that NATO was supposed to prevent.

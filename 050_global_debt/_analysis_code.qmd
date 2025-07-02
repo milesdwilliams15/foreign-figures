@@ -103,7 +103,8 @@ dd |>
   group_by(year) |>
   summarize(
     debt = sum((govdebt_gdp / 100) * r_gdp_usd, na.rm = T) * 1e06,
-    gdp = sum(r_gdp_usd, na.rm = T) * 1e06
+    gdp = sum(r_gdp_usd, na.rm = T) * 1e06,
+    rate = debt / gdp
   ) |>
   ggplot() +
   aes(year, debt / gdp) +
