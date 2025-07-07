@@ -294,3 +294,45 @@ saveit(3, 6)
 ```
 
 As the threat Russia poses to Europe increases, the US is retreating, and Germany will likely assume the mantle of guarantor of European security --- a scenario that NATO was supposed to prevent.
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+fd |>
+  mutate(
+    rp = cinc / sum(cinc),
+    lp = exp(sdpest) / sum(exp(sdpest))
+  ) |>
+  ggplot() +
+  aes(lp, rp) +
+  geom_text(
+    aes(label = countrycode::countrycode(
+      gwcode, "gwn", "gwc"
+    )),
+    color = "navy",
+    family = "mono",
+    fontface = "bold"
+  ) +
+  geom_abline(
+    slope = 1,
+    intercept = 0,
+    linetype = 2,
+    linewidth = 1,
+    color = "orange"
+  ) +
+  labs(
+    title = str_wrap(
+      "Latent versus realized distribution of power in Europe",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Values as of 2015"
+    ),
+    x = "Latent Power",
+    y = "Realized Power",
+    caption = logo
+  )
+saveit(4)
+```
+
