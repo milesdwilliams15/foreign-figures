@@ -1,0 +1,196 @@
+---
+title: "Trading with BRICS"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "steelblue"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 6) {
+  ggsave(
+    here(
+      "052_trade_with_brics",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(peacesciencer)
+create_dyadyears() |>
+  add_cow_trade() -> dt
+```
+
+Add some indicators:
+
+```{r}
+countrycode::countrycode(
+  c("Brazil", "Russia", "India", "China", "South Africa"),
+  "country.name",
+  "cown"
+) -> bricscodes
+dt |>
+  mutate(
+    in_brics = ifelse(
+      ccode1 %in% bricscodes &
+        ccode2 %in% bricscodes,
+      1, 0
+    ),
+    with_brics = ifelse(
+      ccode1 %in% bricscodes |
+        ccode2 %in% bricscodes,
+      1, 0
+    ),
+    with_us = ifelse(
+      ccode1 == 2 |
+        ccode2 == 2, 
+      1, 0
+    )
+  ) -> dt
+
+dt |>
+  drop_na() |>
+  filter(year >= 2010) -> dt
+```
+
+
+
+## Figures
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+dt |>
+  filter(year == 2014) |>
+  summarize(
+    "within BRICS" = mean(flow2[in_brics == 1]),
+    "USA to BRICS" = mean(flow2[ccode1 == 2 & with_brics == 1]),
+    "BRICS to USA" = mean(flow2[ccode2 == 2 & with_brics == 1]),
+    "non-BRICS to USA" = mean(flow2[ccode2 == 2 & with_brics == 0]),
+    "USA to non-BRICS" = mean(flow2[ccode1 == 2 & with_brics == 0])
+  ) |>
+  pivot_longer(everything()) |>
+  arrange(-value) |>
+  ggplot() +
+  aes(value, reorder(str_wrap(name, 10), value)) +
+  geom_col(fill = "navy") +
+  geom_text(
+    aes(
+      label = paste0(
+        "$", round(value / 1e03, 1),
+        "\nbillion"
+      )
+    ),
+    family = "mono",
+    fontface = "bold",
+    color = c("orange", "orange", "navy", "navy", "navy"),
+    hjust = c(1.1, 1.1, -.1, -.1, -.1)
+  ) +
+  labs(
+    title = str_wrap(
+      "Mean exports in current USD in 2014",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: Correlates of War Trade Data (4.0)",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    panel.grid.major = element_blank(),
+    axis.text.y = element_text(hjust = .5)
+  ) +
+  scale_x_continuous(
+    breaks = NULL
+  )
+saveit(1, 4)
+```
+
+Quick thoughts: The US and BRICS are more economically interconnected on average than the typical BRICS member is with its fellows. The US also has little leverage by way of tariffs outside of BRICS countries for Trump's threat to impose tariffs on countries that would align with BRICS to have any bite. 
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+dt |>
+  filter(
+    ccode1 %in% bricscodes,
+    ccode2 == 2
+  ) |>
+  mutate(
+    name = countrycode::countrycode(
+      ccode1, "cown", "country.name"
+    )
+  ) |>
+  filter(year == 2014) |>
+  arrange(flow2) |>
+  ggplot() +
+  aes(flow2, reorder(str_wrap(name, 10), flow2)) +
+  geom_col(fill = "navy") +
+  geom_text(
+    aes(
+      label = paste0(
+        "$", round(flow2 / 1e03, 1),
+        "\nbillion"
+      )
+    ),
+    family = "mono",
+    fontface = "bold",
+    color = c("navy", "navy", "navy", "navy", "orange"),
+    hjust = c(-.1, -.1, -.1, -.1, 1.1)
+  ) +
+  labs(
+    title = str_wrap(
+      "Total exports to USA in current USD in 2014",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: Correlates of War Trade Data (4.0)",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    panel.grid.major = element_blank(),
+    axis.text.y = element_text(hjust = .5)
+  ) +
+  scale_x_continuous(
+    breaks = NULL
+  )
+saveit(2, 4)
+```
+
+Any tariff actions against BRICS are primarily actions directed at China.
+
+This connects with other things I've written about US tariffs --- namely, how the US has much more limited leverage over other countries by imposing tariffs than many assume.
