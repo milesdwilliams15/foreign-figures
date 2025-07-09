@@ -1,0 +1,143 @@
+---
+title: "Aid Trends"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "steelblue"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 6) {
+  ggsave(
+    here(
+      "053_aid_trends",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(gtrendsR)
+
+gtrends(
+  keyword = "usaid",
+  geo = "US"
+) -> dt
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt$interest_over_time |>
+  mutate(
+    hits = str_remove_all(hits, "<") |> as.numeric()
+  ) |>
+  ggplot() +
+  aes(date, hits) +
+  geom_line(
+    linewidth = 1,
+    color = "navy"
+  ) +
+  labs(
+    title = str_wrap(
+      'Hits for "usaid" in Google Trends over the last 5 years',
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Google data accessed via {gtrendsR}"
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(1, 4)
+```
+
+USAID wasn't on anyone's radar until Musk, by way of DOGE, started steam rolling it.
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt$interest_over_time |>
+  mutate(
+    hits = str_remove_all(hits, "<") |> as.numeric()
+  ) |>
+  filter(
+    date >= "2025-01-01"
+  ) |>
+  ggplot() +
+  aes(as.Date(date), hits) +
+  geom_line(
+    linewidth = 1,
+    color = "navy"
+  ) +
+  labs(
+    title = str_wrap(
+      'Hits for "usaid" in Google Trends since Jan. 1, 2025',
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Google data accessed via {gtrendsR}"
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  geom_text_repel(
+    data = . %>%
+      filter(hits == max(hits)),
+    aes(
+      label = "Week of\nFeb. 2"
+    ),
+    nudge_x = 40,
+    nudge_y = 0,
+    family = "mono",
+    fontface = "bold",
+    color = "navy"
+  ) +
+  geom_text_repel(
+    data = . %>%
+      filter(date > "2025-06-01", hits == 3),
+    aes(
+      label = "Week of\nJune 29"
+    ),
+    nudge_x = -30,
+    nudge_y = 10,
+    family = "mono",
+    fontface = "bold",
+    color = "navy"
+  )
+saveit(2, 4)
+```
+
+Interest quickly returned to its baseline, only picking up by a hair's breadth when its shuttering was made official. Current interest sits where it always has --- at near zero.
