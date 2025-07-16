@@ -1,0 +1,355 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "steelblue"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 6) {
+  ggsave(
+    here(
+      "054_protest_correlates",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+## get the universe of countries right
+library(peacesciencer)
+dt <- create_stateyears(subset_years = 2000:2024)
+
+## bring in macro economic data
+library(globalmacrodata)
+gm <- gmd(
+  variables = c("rGDP_USD", "pop", "infl", "unemp")
+)
+dt |>
+  left_join(
+    gm |> 
+      transmute(
+        year,
+        ccode = countrycode::countrycode(
+          ISO3, "iso3c", "cown"
+        ),
+        gdp = rGDP_USD,
+        pop,
+        infl,
+        unemp
+      )
+  ) -> dt
+
+## bring in democracy data
+library(vdemdata)
+
+dd <- vdem
+
+dt |>
+  left_join(
+    dd |>
+      transmute(
+        ccode = countrycode::countrycode(
+          country_name, "country.name", "cown"
+        ),
+        year,
+        vdem = v2x_polyarchy
+      )
+  ) -> dt
+
+## protest data
+pd <- read_csv(
+  here("_data", "acled_aggregated_20250.csv")
+)
+
+pd <- janitor::clean_names(pd)
+
+pd |>
+  transmute(
+    ccode = countrycode::countrycode(country, "country.name", "cown"),
+    year = event_year,
+    events = events,
+    type = sub_event_type
+  ) |>
+  drop_na() -> pd
+```
+
+```{r}
+pd |>
+  left_join(dt) |>
+  filter(year %in% 2020:2024) -> ft
+```
+
+```{r}
+ft |> 
+  group_by(type) |> 
+  summarize(events = sum(events)) |>
+  mutate(pct = events / sum(events)) |>
+  arrange(-pct)
+```
+
+```{r}
+ft |>
+  mutate(
+    npf = (type != "Peaceful protest")+0
+  ) -> ft
+
+ft |>
+  group_by(ccode, year, npf) |>
+  summarize(
+    events = sum(events),
+    across(gdp:vdem, unique)
+  ) -> ft
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+wmap <- map_data("world")
+
+wmap |>
+  mutate(
+    ccode = countrycode::countrycode(region, "country.name", "cown")
+  ) -> wmap
+
+wmap |>
+  left_join(
+    ft |>
+      filter(npf == 1) |>
+      group_by(ccode) |>
+      summarize(events = sum(events)),
+    by = "ccode"
+  ) |> 
+  ggplot() +
+  aes(long, lat) +
+  geom_polygon(
+    aes(group = group, fill = events),
+    linewidth = 0.1,
+    color = "black"
+  ) +
+  coord_fixed() +
+  ggpal(
+    "sequential",
+    "fill",
+    labels = comma
+  ) +
+  labs(
+    title = str_wrap(
+      "Cummulative protest events, 2020-2024",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: ACLED"
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    fill = "Non-Peaceful Protests"
+  ) +
+  scale_x_continuous(
+    labels = NULL
+  ) +
+  scale_y_continuous(
+    labels = NULL
+  ) +
+  theme(
+    legend.title.position = "top",
+    legend.title = element_text(hjust = .5, face = "bold"),
+    legend.text = element_text(
+      hjust = 1,
+      angle = 45
+    )
+  )
+
+saveit(1)
+```
+
+I've coppied the raw innards of `quasipoisson()` and updated it to be log2().
+
+```{r}
+quasipoisson2 <- function (link = "log") 
+{
+    linktemp <- substitute(link)
+    if (!is.character(linktemp)) 
+        linktemp <- deparse(linktemp)
+    okLinks <- c("log", "identity", "sqrt")
+    family <- "quasipoisson"
+    if (linktemp %in% okLinks) 
+        stats <- make.link(linktemp)
+    else if (is.character(link)) {
+        stats <- make.link(link)
+        linktemp <- link
+    }
+    else {
+        if (inherits(link, "link-glm")) {
+            stats <- link
+            if (!is.null(stats$name)) 
+                linktemp <- stats$name
+        }
+        else {
+            stop(gettextf("link \"%s\" not available for %s family; available links are %s", 
+                linktemp, family, paste(sQuote(okLinks), collapse = ", ")), 
+                domain = NA)
+        }
+    }
+    variance <- function(mu) mu
+    validmu <- function(mu) all(is.finite(mu)) && all(mu > 0)
+    dev.resids <- function(y, mu, wt) {
+        r <- mu * wt
+        p <- which(y > 0)
+        r[p] <- (wt * (y * log2(y/mu) - (y - mu)))[p]
+        2 * r
+    }
+    aic <- function(y, n, mu, wt, dev) NA
+    initialize <- expression({
+        if (any(y < 0)) stop("negative values not allowed for the 'quasiPoisson' family")
+        n <- rep.int(1, nobs)
+        mustart <- y + 0.1
+    })
+    structure(list(family = family, link = linktemp, linkfun = stats$linkfun, 
+        linkinv = stats$linkinv, variance = variance, dev.resids = dev.resids, 
+        aic = aic, mu.eta = stats$mu.eta, initialize = initialize, 
+        validmu = validmu, valideta = stats$valideta), class = "family")
+}
+```
+
+
+```{r}
+library(mgcv)
+
+gam(
+  events ~ log2(pop) + log2(gdp) +
+    infl + unemp +
+    vdem + s(ccode, bs = "re") +
+    log2(wevents),
+  data = ft |>
+    filter(npf == 1) |>
+    group_by(year) |>
+    mutate(
+      wevents = sum(events)
+    ),
+  family = quasipoisson2
+) -> fit
+
+summary(fit)
+```
+
+```{r}
+
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+f <- function(x) {
+  exp2 <- function(x) 2^x
+  ifelse(
+    x >= 0, exp2(x) - 1, -(exp2(abs(x)) - 1)
+  ) * 100
+}
+
+library(sjPlot)
+plot_model(
+  fit, 
+  transform = "f",
+  show.values = T,
+  value.offset = .4,
+  rm.terms = "wevents"
+) +
+  scale_x_discrete(
+    labels = c(
+      "Global Protests (log)",
+      "V-Dem Score",
+      "Unemployment (%)",
+      "Inflation (%)",
+      "Real GDP in USD (log)",
+      "Population (log)"
+    )
+  ) +
+  geom_hline(
+    yintercept = 1,
+    linetype = 2,
+    color = "navy"
+  ) +
+  labs(
+    title = str_wrap(
+      "Regression model estimates predicting # of non-peaceful protests",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Estimates based on a psuedo-Poisson model. Country random intercepts not shown. (*s indicate increasing levels of statistical significance).",
+      width = 55
+    ),
+    y = "% change in # protests"
+  )
+saveit(2)
+```
+
+
+
+```{r}
+ft |>
+  mutate(
+    cnty = countrycode::countrycode(
+      ccode, "cown", "country.name"
+    )
+  ) |>
+  filter(
+    cnty %in% c("India", "China"),
+    npf == 1
+  )
+```
+
+
+```{r}
+ft |>
+  mutate(
+    cnty = countrycode::countrycode(
+      ccode, "cown", "country.name"
+    )
+  ) |>
+  filter(
+    cnty %in% c("United States", "Kenya"),
+    npf == 1
+  ) |>
+  group_by(cnty) |>
+  summarize(sum(events))
+```
+
+
+```{r}
+17922854 / 3510955	
+```
+
