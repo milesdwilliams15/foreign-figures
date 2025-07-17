@@ -32,6 +32,11 @@ my_theme <- function() {
       ),
       axis.text = element_text(
         face = "bold"
+      ),
+      legend.title.position = "top",
+      legend.title = element_text(
+        hjust = .5,
+        face = "bold.italic"
       )
     ) 
 }

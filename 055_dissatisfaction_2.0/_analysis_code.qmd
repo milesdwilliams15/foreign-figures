@@ -1,0 +1,262 @@
+---
+title: "Dissatisfaction 2.0"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "steelblue"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 6) {
+  ggsave(
+    here(
+      "055_dissatisfaction_2.0",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+## Data
+
+```{r}
+kent_dt <- read_rds(
+  here("_data", "kent_dissatisfaction.rds")
+)
+
+kent_dt |>
+  left_join(
+    peacesciencer::cow_sdp_gdp |>
+      transmute(
+        stateabb = countrycode::countrycode(
+          ccode, "cown", "cowc"
+        ),
+        year,
+        sdp = exp(sdpest)
+      ) |>
+      group_by(year) |>
+      mutate(
+        sdp_pct = sdp / sum(sdp, na.rm = T)
+      ) |>
+      ungroup()
+  ) -> kent_dt
+```
+
+
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+kent_dt |>
+  mutate(sdp_exp = percent_win * sdp_pct) |>
+  pivot_longer(
+    c(cinc, expectations, sdp_pct, sdp_exp)
+  ) |>
+  mutate(
+    name = rep(
+      c("CINC", "CINC x\nDOE", "SDP", "SDP x\nDOE"),
+      len = n()
+    )
+  ) |>
+  ggplot() +
+  aes(year, value, color = name, fill = name) +
+  geom_smooth() +
+  ggpal() +
+  ggpal(aes = "fill") +
+  labs(
+    title = str_wrap(
+      "Trends in measures of expected benefits over time",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: Data from Kent (2020) + {peacesciencer}"
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = "Measure:",
+    fill = "Measure:"
+  )
+saveit(1)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+kent_dt |>
+  mutate(sdp_exp = percent_win * sdp_pct) |>
+  pivot_longer(
+    c(cinc, expectations, sdp_pct, sdp_exp)
+  ) |>
+  mutate(
+    name = rep(
+      c("CINC", "CINC x\nDOE", "SDP", "SDP x\nDOE"),
+      len = n()
+    ),
+    value = benefits - value
+  ) |>
+  ggplot() +
+  aes(year, value, color = name, fill = name) +
+  geom_smooth() +
+  ggpal() +
+  ggpal(aes = "fill") +
+  labs(
+    title = str_wrap(
+      "Trends in measures of dissatisfaction over time",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: Data from Kent (2020) + {peacesciencer}"
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = "Measure:",
+    fill = "Measure:"
+  )
+saveit(2)
+```
+
+```{r}
+library(mgcv)
+
+kent_dt |>
+  mutate(
+    dis1 = cinc - benefits,
+    dis2 = cinc * percent_win - benefits,
+    dis3 = sdp_pct - benefits,
+    dis4 = sdp_pct * percent_win - benefits,
+    cnum = as.numeric(as.factor(stateabb))
+  ) -> kent_dt
+
+list(
+  onset ~ log(tpop) + polity + dis1 + s(cnum, bs = "re"),
+  onset ~ log(tpop) + polity + dis2 + s(cnum, bs = "re"),
+  onset ~ log(tpop) + polity + dis3 + s(cnum, bs = "re"),
+  onset ~ log(tpop) + polity + dis4 + s(cnum, bs = "re")
+) |>
+  map(
+    ~ gam(.x, data = kent_dt, family = binomial)
+  ) -> fits
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+library(sjPlot)
+
+p1 <- plot_model(
+  fits[[1]],
+  type = "pred",
+  terms = "dis1"
+) +
+  labs(
+    title = "CINC only",
+    x = NULL,
+    y = NULL
+  ) +
+  theme(
+    plot.title = element_text(hjust = .5, face = "plain")
+  )
+
+p2 <- plot_model(
+  fits[[2]],
+  type = "pred",
+  terms = "dis2"
+) +
+  labs(
+    title = expression("CINC "%*%" DOE"),
+    x = NULL,
+    y = NULL
+  ) +
+  theme(
+    plot.title = element_text(hjust = .5, face = "plain")
+  )
+
+p3 <- plot_model(
+  fits[[3]],
+  type = "pred",
+  terms = "dis3"
+) +
+  labs(
+    title = "SDP only",
+    x = NULL,
+    y = NULL
+  ) +
+  theme(
+    plot.title = element_text(hjust = .5, face = "plain")
+  )
+
+p4 <- plot_model(
+  fits[[4]],
+  type = "pred",
+  terms = "dis4"
+) +
+  labs(
+    title = expression("SDP "%*%" DOE"),
+    x = NULL,
+    y = NULL
+  ) +
+  theme(
+    plot.title = element_text(hjust = .5, face = "plain")
+  )
+
+library(patchwork)
+
+(p1 + p2) / (p3 + p4) +
+  plot_annotation(
+    title = str_wrap(
+      "Predicted chance of conflict initiation with alternative measures of dissatisfaction",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Logit predictions, controlling for population, democracy, and random country intercepts.",
+      width = 55
+    ),
+    caption = logo
+  ) &
+  xlim(c(-.2, .3)) &
+  scale_y_continuous(
+    limits = c(0, .8),
+    labels = percent
+  )
+saveit(3)
+```
+
+```{r}
+library(modelr)
+fits |>
+  map(
+    ~ sqrt(mean(residuals.glm(.x, type = "response")^2, 
+                      na.rm = T))
+  )
+```
+
+Sometimes, hard work adds up to very little added benefit. But you have to do the hard work to find out. 
