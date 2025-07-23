@@ -1,0 +1,154 @@
+---
+title: "Tariffs on Russia"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("navy", "orange"),
+  sequential = c("white", "steelblue"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 6) {
+  ggsave(
+    here(
+      "057_russia_tariffs",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(globalmacrodata)
+d1 <- gmd()
+d1 |>
+  filter(ISO3 == "RUS") |>
+  transmute(
+    year,
+    exports,
+    exports_gdp = exports_GDP
+  ) -> d1
+
+library(peacesciencer)
+create_dyadyears() |>
+  filter(ccode1 == 365, year %in% 2010:2014) |>
+  add_cow_trade() -> d2
+```
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+d1 |>
+  filter(year %in% 2000:2024) |>
+  mutate(
+    exports = exports / 1e06,
+    exports_gdp = exports_gdp
+  ) |>
+  pivot_longer(
+    - year
+  ) |>
+  mutate(
+    name = ifelse(name == "exports", "Trillions $", "% of GDP")
+  ) |>
+  ggplot() +
+  aes(year, value) +
+  facet_wrap(~ name, scales = "free") +
+  geom_point(color = "orange") +
+  geom_smooth(
+    method = "gam",
+    se = F,
+    color = "navy"
+  ) +
+  labs(
+    title = str_wrap(
+      "Russian exports to the world from 2000 to 2024",
+      width = 37
+    ),
+    subtitle = "Source: Global Macro Database",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    strip.text = element_text(face = "bold.italic")
+  )
+saveit(1)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+d2 |>
+  filter(year == 2014) |>
+  mutate(
+    pct = flow2 / sum(flow2, na.rm = T)
+  ) |>
+  slice_max(pct, n = 10) |>
+  mutate(
+    name = countrycode::countrycode(
+      ccode2, "cown", "country.name"
+    )
+  ) |>
+  ggplot() +
+  aes(pct, reorder(name, pct)) +
+  geom_col(
+    aes(fill = ifelse(ccode2 == 2, "2", "1"))
+  ) +
+  ggpal("binary", "fill") +
+  geom_text(
+    aes(
+      color = ifelse(ccode2 == 2, "1", "2"),
+      label = percent(pct, accuracy = 0.1)
+    ),
+    family = "mono",
+    fontface = "bold.italic",
+    hjust = 1.1
+  ) +
+  ggpal("binary") +
+  labs(
+    title = str_wrap(
+      "Top 10 Russian importers in 2014",
+      width = 37
+    ),
+    subtitle = "Source: Correlates of War International Trade Data (4.0)",
+    x = "\n% of all Russian exports",
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = NULL
+  ) +
+  theme(
+    legend.position = "",
+    panel.grid.major = element_blank()
+  )
+saveit(2)
+```
+
