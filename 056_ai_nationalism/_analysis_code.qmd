@@ -1,0 +1,193 @@
+---
+title: "AI Nationalism"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "steelblue"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 6) {
+  ggsave(
+    here(
+      "056_ai_nationalism",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+Source: https://ourworldindata.org/grapher/cumulative-number-of-large-scale-ai-systems-by-country
+
+```{r}
+read_csv(
+  here(
+    "_data",
+    "cumulative-number-of-large-scale-ai-systems-by-country.csv"
+  )
+) -> dt
+
+colnames(dt) <- c("country", "code", "year", "systems")
+
+dt |>
+  drop_na(code) -> dt
+```
+
+
+```{r}
+library(globalmacrodata)
+
+gm <- gmd()
+
+gm |>
+  transmute(
+    code = ISO3,
+    year,
+    gdp = rGDP_USD,
+    pop
+  ) -> gm
+
+dt |>
+  left_join(
+    gm, by = c("code", "year")
+  ) -> dt
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(year, systems, group = code) +
+  geom_point(color = "gray") +
+  geom_line(color = "gray") +
+  geom_line(
+    data = . %>% 
+      group_by(code) %>%
+      mutate(ms = max(systems, na.rm = T)) %>% 
+      ungroup() %>%
+      slice_max(ms, n = 8 * 5),
+    color = "navy"
+  ) +
+  geom_point(
+    data = . %>% 
+      group_by(code) %>%
+      mutate(ms = max(systems, na.rm = T)) %>% 
+      ungroup() %>%
+      slice_max(ms, n = 8 * 5),
+    color = "orange"
+  ) +
+  geom_text_repel(
+    data = . %>% 
+      group_by(code) %>%
+      mutate(ms = max(systems, na.rm = T)) %>% 
+      ungroup() %>%
+      slice_max(ms, n = 8 * 5) %>%
+      filter(year == 2025),
+    color = "gray8",
+    family = "mono",
+    fontface = "bold",
+    aes(
+      label = paste0(
+        code, " (", systems, ")"
+      )
+    ),
+    nudge_x = 2
+  ) +
+  scale_x_continuous(
+    breaks = c(2017, 2020:2025)
+  ) +
+  theme(
+    panel.grid.major.x = element_blank()
+  ) +
+  labs(
+    title = str_wrap(
+      "Cummulative # of large-scale AI systems by country",
+      width = 37
+    ),
+    subtitle = "Source: Our World in Data",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(1)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+dt |>
+  filter(year == 2024) |>
+  ggplot() +
+  aes(gdp, systems) +
+  geom_smooth(
+    method = "lm",
+    se = F,
+    color = "orange"
+  ) +
+  geom_point(
+    color = "navy"
+  ) +
+  geom_text_repel(
+    aes(label = code),
+    color = "navy",
+    family = "mono",
+    fontface = "bold",
+    box.padding = .5,
+    max.overlaps = Inf,
+    min.segment.length = 0
+  ) +
+  scale_x_log10(
+    labels = ~ paste0(
+      "$", .x / 1e06, " tril"
+    )
+  ) +
+  scale_y_log10() +
+  labs(
+    title = str_wrap(
+      "GDP and total AI systems by country as of 2024",
+      width = 37
+    ),
+    subtitle = "Source: Our World in Data + Global Macro Database",
+    x = "\nReal GDP in U.S. Dollars (log-10)",
+    y = "# of AI Systems (log-10)",
+    caption = logo
+  )
+saveit(2)
+```
+
+
+```{r}
+lm(log(systems) ~ log(gdp), filter(dt, year == 2024)) |>
+  summary()
+```
+
