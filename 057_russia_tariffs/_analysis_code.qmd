@@ -45,8 +45,9 @@ saveit <- function(num = 1, ht = 5, wd = 6) {
 library(globalmacrodata)
 d1 <- gmd()
 d1 |>
-  filter(ISO3 == "RUS") |>
+  #filter(ISO3 == "RUS") |>
   transmute(
+    code = ISO3,
     year,
     exports,
     exports_gdp = exports_GDP
@@ -54,7 +55,7 @@ d1 |>
 
 library(peacesciencer)
 create_dyadyears() |>
-  filter(ccode1 == 365, year %in% 2010:2014) |>
+  filter(year %in% 2010:2014) |>
   add_cow_trade() -> d2
 ```
 
@@ -65,13 +66,13 @@ create_dyadyears() |>
 #| fig-width: 6
 
 d1 |>
-  filter(year %in% 2000:2024) |>
+  filter(year %in% 2000:2024, code == "RUS") |>
   mutate(
     exports = exports / 1e06,
     exports_gdp = exports_gdp
   ) |>
   pivot_longer(
-    - year
+    exports:exports_gdp
   ) |>
   mutate(
     name = ifelse(name == "exports", "Trillions $", "% of GDP")
@@ -106,7 +107,7 @@ saveit(1)
 #| fig-width: 6
 
 d2 |>
-  filter(year == 2014) |>
+  filter(year == 2014, ccode1 == 365) |>
   mutate(
     pct = flow2 / sum(flow2, na.rm = T)
   ) |>
@@ -150,5 +151,19 @@ d2 |>
     panel.grid.major = element_blank()
   )
 saveit(2)
+```
+
+
+```{r}
+d1 |>
+  filter(year == 2024) |>
+  arrange(-exports_gdp) |>
+  transmute(
+    code,
+    pct = percent(exports_gdp / 100, .1)
+  ) |>
+  filter(
+    code %in% c("CHN", "USA", "RUS")
+  )
 ```
 
