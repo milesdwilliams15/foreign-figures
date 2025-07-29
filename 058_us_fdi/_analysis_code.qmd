@@ -1,0 +1,168 @@
+---
+title: "U.S. FDI"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("navy", "orange"),
+  sequential = c("white", "steelblue"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 6) {
+  ggsave(
+    here(
+      "058_us_fdi",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(wbstats)
+
+wb <- wb_data(
+  c("fdi_out" = "BM.KLT.DINV.CD.WD",
+    "fdi_in"  = "BX.KLT.DINV.CD.WD",
+    "oda_out" = "DC.ODA.TOTL.CD",
+    "oda_in"  = "DT.ODA.DACD.CD",
+    "gdp"     = "NY.GDP.MKTP.CD",
+    "pop"     = "SP.POP.TOTL") 
+)
+
+wb |>
+  filter(iso2c == "US")
+```
+
+```{r}
+wb |>
+  filter(
+    date >= 1970
+  ) |>
+  group_by(iso2c) |>
+  mutate(
+    donors = sum(oda_out, na.rm = T) > 0
+  ) |>
+  ungroup() -> wb
+```
+
+
+## Filter
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+wb |>
+  filter(donors) |>
+  ggplot() +
+  aes(date) +
+  geom_textsmooth(
+    aes(y = fdi_out),
+    method = "gam",
+    color = "navy",
+    label = "FDI",
+    linewidth = 1
+  ) +
+  geom_textsmooth(
+    aes(y = oda_out),
+    method = "gam",
+    method.args = list(family = quasipoisson),
+    color = "orange",
+    label = "ODA",
+    linewidth = 1
+  ) +
+  labs(
+    title = str_wrap(
+      "Smoothed average of financial outflows among 31 donor countries, 1970 to 2024",
+      width = 37
+    ),
+    subtitle = "Source: World Bank",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = ~ paste0("$", .x / 1e09, " tril")
+  )
+saveit(1)
+```
+
+
+```{r}
+wb |>
+  filter(date == 2022, donors) |>
+  summarize(
+    ratio = sum(fdi_out, na.rm = T) / sum(oda_out, na.rm = T)
+  )
+```
+
+
+```{r}
+fit1 <- lm(asinh(oda_in) ~ asinh(pop) + asinh(gdp) +
+             poly(date, 3), 
+           data = wb)
+fit2 <- lm(asinh(fdi_in) ~ asinh(pop) + asinh(gdp) + 
+             poly(date, 3), 
+           data = wb)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+library(modelsummary)
+modelplot(
+  list("ODA" = fit1, "FDI" = fit2),
+  coef_map = c(
+    "asinh(gdp)" = "GDP (asinh)",
+    "asinh(pop)" = "Pop (asinh)"
+  )
+) +
+  labs(
+    title = str_wrap(
+      "Regression model estimates for ODA and FDI",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Models include a cubic time trend (not shown). Pooled data from 1970-2024 for FDI and 1970-2011 for ODA.",
+      width = 55
+    ),
+    x = "\nPredicted Change in Financing",
+    caption = logo,
+    color = "Outcome:"
+  ) +
+  geom_vline(
+    xintercept = 0,
+    lty = 2
+  ) +
+  ggpal("binary") +
+  scale_x_continuous(
+    labels = ~ percent(.x / 100)
+  )
+saveit(2)
+```
+
