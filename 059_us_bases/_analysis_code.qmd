@@ -1,0 +1,302 @@
+---
+title: "U.S. Bases"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("navy", "orange"),
+  sequential = c("white", "steelblue"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 6) {
+  ggsave(
+    here(
+      "059_us_bases",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+
+
+
+## Data
+
+```{r}
+dt <- haven::read_dta(
+  "https://ma-allen.com/Documents/research/minerva/wave-1-2-combined-2019.dta"
+)
+```
+
+
+Let's just pull out the vars I need:
+
+```{r}
+dt <- dt |>
+  select(country, year, starts_with("troops"))
+
+dt |>
+  mutate(
+    troops_1 = frcode(
+      str_detect(troops_1, "ecline to answer") ~ "Don't know",
+      troops_1 == "Very unfavorable" ~ "Very unfavorable",
+      troops_1 == "Somewhat unfavorable" ~ "Somewhat unfavorable",
+      troops_1 == "Neutral" ~ "Neutral",
+      troops_1 == "Somewhat favorable" ~ "Somewhat favorable",
+      troops_1 == "Very favorable" ~ "Very favorable"
+    )
+  ) -> dt
+
+dt |>
+  mutate(
+    country = ifelse(
+      country == "The United Kingdom", "United Kingdom", country
+    )
+  ) -> dt
+```
+
+
+And I want to make sure I have the correct labels for the variables when I start plotting.
+
+```{r}
+var_names <- read_csv(
+  here("_data", "_troop_survey_vars.csv")
+) |>
+  janitor::clean_names()
+
+troop_vars <- var_names |>
+  filter(variable %in% colnames(dt))
+```
+
+## Figures
+
+```{r}
+#| fig-height: 6
+#| fig-width: 6
+  
+dt |> 
+  ct(troops_1, show_na = F) |> 
+  ggplot() +
+  aes(troops_1, pct) +
+  geom_col(
+    fill = "navy"
+  ) +
+  geom_col(
+    data = . %>% filter(troops_1 == "Don't know"),
+    fill = "gray30"
+  ) +
+  geom_text(
+    aes(label = percent(pct, .1)),
+    vjust = 1.2,
+    family = "mono",
+    fontface = "bold",
+    color = "orange"
+  ) +
+  labs(
+    title = str_wrap(
+      "Assessment of U.S. troop presence in 14 countries, 2018-2019",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: Allen, Flynn, Machain, & Stravers (2020) APSR.",
+      width = 55
+    ),
+    y = NULL,
+    x = NULL,
+    caption = logo
+  ) +
+  annotate(
+    "text",
+    x = 2,
+    y = .2,
+    label = "% out of\n28,206 responses",
+    family = "mono",
+    fontface = "bold"
+  ) +
+  scale_y_continuous(
+    breaks = NULL
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.major = element_blank()
+  )
+saveit(1, 6)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+dt |>
+  group_by(country) |>
+  mean_ci(troops_1 %in% c("Somewhat favorable", "Very favorable")) |>
+  filter(country != "NA") |>
+  ggplot() +
+  aes(mean, reorder(country, mean)) +
+  geom_col(
+    fill = "navy"
+  ) +
+  geom_text(
+    aes(label = percent(mean, .1)),
+    hjust = 1.2,
+    color = "orange",
+    family = "mono",
+    fontface = "bold"
+  ) +
+  labs(
+    title = str_wrap(
+      "Percent reporting a somewhat or very favorable assessment of U.S. troop presence by country, 2018-2019",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: Allen, Flynn, Machain, & Stravers (2020) APSR.",
+      width = 55
+    ),
+    y = NULL,
+    x = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = NULL
+  ) +
+  theme(
+    panel.grid.major = element_blank()
+  )
+saveit(2)
+```
+
+
+Try the last one as a dumbbell that also shows unfavorable responses.
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+bind_rows(
+  dt |>
+    group_by(country) |>
+    mean_ci(troops_1 %in% c("Somewhat favorable", "Very favorable")) |>
+    mutate(out = "Favorable"),
+  dt |>
+    group_by(country) |>
+    mean_ci(troops_1 %in% c("Somewhat unfavorable", "Very unfavorable")) |>
+    mutate(out = "Unfavorable")
+) |>
+  filter(country != "NA") |>
+  ggplot() +
+  aes(mean, reorder(country, mean)) +
+  geom_line(
+    color = "gray",
+    linewidth = 1
+  ) +
+  geom_label(
+    aes(label = percent(mean, .1), color = out),
+    family = "mono",
+    fontface = "bold"
+  ) +
+  labs(
+    title = str_wrap(
+      "Percent reporting a somewhat or very favorable assessment of U.S. troop presence by country, 2018-2019",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: Allen, Flynn, Machain, & Stravers (2020) APSR.",
+      width = 55
+    ),
+    y = NULL,
+    x = NULL,
+    color = "% Indicating:",
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = NULL,
+    limits = 0:1
+  ) +
+  theme(
+    panel.grid.major = element_blank()
+  )
+saveit(3)
+```
+
+
+Don't care for that. How about showing just the margin?
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+dt |>
+  group_by(country) |>
+  summarize(
+    fav = mean(troops_1 %in% c("Somewhat favorable", "Very favorable")),
+    unfav = mean(troops_1 %in% c("Somewhat unfavorable", "Very unfavorable"))
+  ) |>
+  mutate(
+    margin = fav - unfav
+  ) |>
+  filter(country != "NA") |>
+  ggplot() +
+  aes(margin, reorder(country, margin)) +
+  geom_vline(
+    xintercept = 0,
+    color = "orange"
+  ) +
+  geom_pointrange(
+    aes(xmin = margin, xmax = 0),
+    color = "navy",
+    size = 0
+  ) +
+  geom_label(
+    aes(label = percent(margin, .1)),
+    color = "navy",
+    family = "mono",
+    fontface = "bold",
+    fill = "gray95",
+    label.size = NA
+  ) +
+  labs(
+    title = str_wrap(
+      "Percent margin reporting a favorable versus unfavorable assessment of U.S. troop presence by country, 2018-2019",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: Allen, Flynn, Machain, & Stravers (2020) APSR.",
+      width = 55
+    ),
+    y = NULL,
+    x = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = c(-1, 0, 1),
+    limits = c(-1, 1),
+    labels = percent
+  ) +
+  theme(
+    panel.grid.major = element_blank()
+  )
+saveit(4)
+```
