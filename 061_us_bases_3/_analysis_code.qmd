@@ -1,0 +1,598 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("navy", "orange"),
+  sequential = c("white", "steelblue"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 6) {
+  ggsave(
+    here(
+      "061_us_bases_3",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+
+## Data
+
+```{r}
+dt <- read_csv(
+  here::here(
+    "_data",
+    "apsr-data-outside-the-wire.csv"
+  )
+)
+```
+
+
+```{r}
+dt |>
+  mutate(
+    contact = ifelse(contact_pers == "Yes", 1, 0),
+    across(
+      c(troops_1, chinese_gov:chinese_people, american_gov:american_people),
+      ~ case_when(
+        .x %in% c("Somewhat favorable", "Very favorable") ~ 1,
+        .x %in% c("Somewhat unfavorable", "Very unfavorable") ~ -1,
+        TRUE ~ 0
+      ),
+      .names = "{col}_rec"
+    ),
+    usa_influence = ifelse(
+      american_inf_1 %in% c("Some", "A little", "A lot"), 1, 0
+    ),
+    chn_influence = ifelse(
+      chinese_inf_1 %in% c("Some", "A little", "A lot"), 1, 0
+    ),
+    usa_positive = case_when(
+      american_inf_2 %in% c("Positive", "Very positive") ~ 1,
+      american_inf_2 %in% c("Negative", "Very negative") ~ -1,
+      TRUE ~ 0
+    ),
+    chn_positive = case_when(
+      chinese_inf_2 %in% c("Positive", "Very positive") ~ 1,
+      chinese_inf_2 %in% c("Negative", "Very negative") ~ -1,
+      TRUE ~ 0
+    )
+  ) -> dt
+```
+
+
+
+```{r}
+dt |>
+  drop_na(country) -> dt
+```
+
+
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+bind_rows(
+  dt |>
+    group_by(country) |>
+    summarize(
+      net_gov = mean(chinese_gov_rec),
+      net_peo = mean(chinese_people_rec)
+    ) |>
+    arrange(net_gov) |>
+    mutate(
+      ord = 1:n() + 1
+    ),
+  dt |>
+    summarize(
+      net_gov = mean(chinese_gov_rec),
+      net_peo = mean(chinese_people_rec)
+    ) |>
+    mutate(
+      country = "Overall Average",
+      ord = 1
+    )
+) |>
+  pivot_longer(net_gov:net_peo) |>
+  ggplot() +
+  aes(value, reorder(country, ord)) +
+  geom_line(
+    color = "gray30",
+    linewidth = 1
+  ) +
+  geom_point(
+    aes(color = name),
+    size = 2
+  ) +
+  ggpal(
+    "binary",
+    labels = c("Government", "People")
+  ) +
+  labs(
+    title = str_wrap(
+      "Attitudes toward China",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: Allen, Flynn, Machain, & Stravers (2020) APSR.",
+      width = 60
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = "% net assessment of the Chinese..."
+  ) +
+  theme(
+    axis.text.y = element_text(
+      face = c(
+        "bold", rep("italic", len = 14)
+      )
+    )
+  ) +
+  geom_vline(
+    xintercept = 0,
+    lty = 2
+  ) +
+  scale_x_continuous(
+    labels = percent,
+    breaks = seq(-1, 1, by = .1)
+  )
+saveit(1, 5, 7)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+bind_rows(
+  dt |>
+    group_by(country) |>
+    summarize(
+      net_gov = mean(american_gov_rec),
+      net_peo = mean(american_people_rec)
+    ) |>
+    arrange(net_gov) |>
+    mutate(
+      ord = 1:n() + 1
+    ),
+  dt |>
+    summarize(
+      net_gov = mean(american_gov_rec),
+      net_peo = mean(american_people_rec)
+    ) |>
+    mutate(
+      country = "Overall Average",
+      ord = 1
+    )
+) |>
+  pivot_longer(net_gov:net_peo) |>
+  ggplot() +
+  aes(value, reorder(country, ord)) +
+  geom_line(
+    color = "gray30",
+    linewidth = 1
+  ) +
+  geom_point(
+    aes(color = name),
+    size = 2
+  ) +
+  ggpal(
+    "binary",
+    labels = c("Government", "People")
+  ) +
+  labs(
+    title = str_wrap(
+      "Attitudes toward America",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: Allen, Flynn, Machain, & Stravers (2020) APSR.",
+      width = 60
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = "% net assessment of the American..."
+  ) +
+  theme(
+    axis.text.y = element_text(
+      face = c(
+        "bold", rep("italic", len = 14)
+      )
+    )
+  ) +
+  geom_vline(
+    xintercept = 0,
+    lty = 2
+  ) +
+  scale_x_continuous(
+    labels = percent,
+    breaks = seq(-1, 1, by = .1)
+  )
+saveit(2, 5, 7)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+bind_rows(
+  dt |>
+    group_by(country) |>
+    summarize(
+      chn = mean(chn_influence),
+      usa = mean(usa_influence)
+    ) |>
+    arrange(usa) |>
+    mutate(
+      ord = 1:n() + 1
+    ),
+  dt |>
+    summarize(
+      chn = mean(chn_influence),
+      usa = mean(usa_influence)
+    ) |>
+    mutate(
+      country = "Overall Average",
+      ord = 1
+    )
+) |>
+  pivot_longer(chn:usa) |>
+  ggplot() +
+  aes(value, reorder(country, ord)) +
+  geom_line(
+    color = "gray30",
+    linewidth = 1
+  ) +
+  geom_point(
+    aes(color = name),
+    size = 2
+  ) +
+  ggpal(
+    "binary",
+    labels = c("China", "America")
+  ) +
+  labs(
+    title = str_wrap(
+      "Are American and China influential?",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: Allen, Flynn, Machain, & Stravers (2020) APSR.",
+      width = 60
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = "Perceived influence of..."
+  ) +
+  theme(
+    axis.text.y = element_text(
+      face = c(
+        "bold", rep("italic", len = 14)
+      )
+    )
+  ) +
+  geom_vline(
+    xintercept = 0,
+    lty = 2
+  ) +
+  scale_x_continuous(
+    labels = percent,
+    breaks = seq(-1, 1, by = .1)
+  )
+saveit(3, 5, 7)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+bind_rows(
+  dt |>
+    group_by(country) |>
+    summarize(
+      chn = mean(chn_positive),
+      usa = mean(usa_positive)
+    ) |>
+    arrange(usa) |>
+    mutate(
+      ord = 1:n() + 1
+    ),
+  dt |>
+    summarize(
+      chn = mean(chn_positive),
+      usa = mean(usa_positive)
+    ) |>
+    mutate(
+      country = "Overall Average",
+      ord = 1
+    )
+) |>
+  pivot_longer(chn:usa) |>
+  ggplot() +
+  aes(value, reorder(country, ord)) +
+  geom_line(
+    color = "gray30",
+    linewidth = 1
+  ) +
+  geom_point(
+    aes(color = name),
+    size = 2
+  ) +
+  ggpal(
+    "binary",
+    labels = c("Chinese influence", "American influence")
+  ) +
+  labs(
+    title = str_wrap(
+      "Are American and Chinese influence positive?",
+      width = 45
+    ),
+    subtitle = str_wrap(
+      "Source: Allen, Flynn, Machain, & Stravers (2020) APSR.",
+      width = 60
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = "Net assessment of..."
+  ) +
+  theme(
+    axis.text.y = element_text(
+      face = c(
+        "bold", rep("italic", len = 14)
+      )
+    )
+  ) +
+  geom_vline(
+    xintercept = 0,
+    lty = 2
+  ) +
+  scale_x_continuous(
+    labels = percent,
+    breaks = seq(-1, 1, by = .1)
+  )
+saveit(4, 5, 7)
+```
+
+
+
+```{r}
+library(mfx)
+
+tibble(
+  model = c("Positive assessment of Chinese gov't",
+            "Positive assessment of Chinese people",
+            "Seeing China as influential",
+            "Seeing China's influence as positive"),
+  form = list(
+    chinese_gov_rec ~ contact,
+    chinese_people_rec ~ contact,
+    chn_influence ~ contact,
+    chn_positive ~ contact
+  ),
+  fit  = map(
+    form,
+    ~ logitmfx(
+        update(.x, . ~ . + 
+                 gender + minority + ed + age + income + country), 
+        data = dt |> 
+          mutate(
+            across(
+              c(chinese_gov_rec, chinese_people_rec, chn_positive),
+              ~ (.x + 1) / 2
+            )
+          ),
+        robust = T
+      )
+  )
+) -> mod_ests
+
+mod_ests |>
+  mutate(
+    coef = map(fit, ~ tidy(.x) |> filter(term == "contact"))
+  ) |>
+  unnest(
+    coef
+  ) -> mod_ests
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+mod_ests |>
+  mutate(
+    lo = estimate - 1.96 * std.error,
+    hi = estimate + 1.96 * std.error,
+    ord = 1:n()
+  ) |>
+  ggplot() +
+  aes(
+    x = estimate * 100,
+    y = reorder(str_wrap(model, 15), - ord),
+    xmin = lo * 100,
+    xmax = hi * 100
+  ) +
+  geom_pointrange(
+    color = "navy"
+  ) +
+  geom_vline(
+    xintercept = 0,
+    color = "orange"
+  ) +
+  geom_text(
+    aes(label = paste0("+ ", round(estimate * 100, 1), "%")),
+    vjust = -1,
+    family = "mono",
+    fontface = "bold",
+    color = "navy"
+  ) +
+  scale_x_continuous(
+    breaks = 0
+  ) +
+  labs(
+    title = str_wrap(
+      "Contact with U.S. troops reflects well...on China?",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Predicted change in the likelihood of...",
+      width = 55
+    ),
+    x = "Percentage point change due to\ncontact with U.S. troops",
+    y = NULL,
+    caption = logo
+  ) +
+  geom_label(
+    x = .1,
+    y = 3.5,
+    label = str_wrap(
+      "Predictions based on logit models, controlling for gender, minority status, education, age, income, survey year, and country.",
+      width = 30
+    ),
+    hjust = 0,
+    family = "mono",
+    fontface = "bold",
+    size = 3.5
+  )
+saveit(5, 7)
+```
+
+```{r}
+library(mfx)
+
+tibble(
+  model = c("Positive assessment of U.S. troops", 
+            "Positive assessment of U.S. gov't",
+            "Positive assessment of U.S. people",
+            "Seeing the U.S. as influential",
+            "Seeing U.S. influence as positive"),
+  form = list(
+    troops_1_rec ~ contact,
+    american_gov_rec ~ contact,
+    american_people_rec ~ contact,
+    usa_influence ~ contact,
+    usa_positive ~ contact
+  ),
+  fit  = map(
+    form,
+    ~ logitmfx(
+        update(.x, . ~ . + 
+                 gender + minority + ed + age + income + country), 
+        data = dt |> 
+          mutate(
+            across(
+              c(american_gov_rec, american_people_rec, 
+                usa_positive, troops_1_rec),
+              ~ (.x + 1) / 2
+            )
+          ),
+        robust = T
+      )
+  )
+) -> mod_ests
+
+mod_ests |>
+  mutate(
+    coef = map(fit, ~ tidy(.x) |> filter(term == "contact"))
+  ) |>
+  unnest(
+    coef
+  ) -> mod_ests
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+mod_ests |>
+  mutate(
+    lo = estimate - 1.96 * std.error,
+    hi = estimate + 1.96 * std.error,
+    ord = 1:n()
+  ) |>
+  ggplot() +
+  aes(
+    x = estimate * 100,
+    y = reorder(str_wrap(model, 15), - ord),
+    xmin = lo * 100,
+    xmax = hi * 100
+  ) +
+  geom_pointrange(
+    color = "navy"
+  ) +
+  geom_vline(
+    xintercept = 0,
+    color = "orange"
+  ) +
+  geom_text(
+    aes(label = paste0("+ ", round(estimate * 100, 1), "%")),
+    vjust = -1,
+    family = "mono",
+    fontface = "bold",
+    color = "navy"
+  ) +
+  scale_x_continuous(
+    breaks = 0
+  ) +
+  labs(
+    title = str_wrap(
+      "Contact with U.S. troops reflects well on America",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Predicted change in the likelihood of...",
+      width = 55
+    ),
+    x = "Percentage point change due to\ncontact with U.S. troops",
+    y = NULL,
+    caption = logo
+  ) +
+  geom_label(
+    x = .1,
+    y = 4.5,
+    label = str_wrap(
+      "Predictions based on logit models, controlling for gender, minority status, education, age, income, survey year, and country.",
+      width = 45
+    ),
+    hjust = 0,
+    family = "mono",
+    fontface = "bold",
+    size = 3.5
+  )
+saveit(6, 7)
+```
+
