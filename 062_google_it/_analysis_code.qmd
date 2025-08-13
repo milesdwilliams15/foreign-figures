@@ -1,0 +1,282 @@
+---
+title: "Google it!"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("navy", "orange"),
+  sequential = c("white", "steelblue"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 6) {
+  ggsave(
+    here(
+      "062_google_it",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(gtrendsR)
+library(peacesciencer)
+
+create_stateyears(
+  system = "gw",
+  subset_years = 2010:2019
+) -> dt
+
+dt |>
+  mutate(
+    statename = countrycode::countrycode(
+      statename, "country.name", "country.name"
+    )
+  ) |> drop_na(statename) -> dt
+
+cnames <- dt |>
+  pull(statename) |>
+  unique() |>
+  sort()
+
+trends <- list()
+for(i in 1:length(cnames)) {
+  cat("\n  Working on", cnames[i])
+  trends[[i]] <- gtrends(
+    keyword = cnames[i],
+    time = "2010-01-01 2018-12-31",
+    low_search_volume = T,
+    onlyInterest = T
+  )
+  if(i %in% seq(10, 180, by = 10)) {
+    cat("\n...RESTING...")
+    Sys.sleep(30)
+  }
+}
+
+for(i in 1:length(trends)) {
+  trends[[i]] <- trends[[i]]$interest_over_time |>
+    transmute(date, 
+              year = round_date(date, "year") |>
+                format("%Y") |> as.numeric(), 
+              statename = keyword, hits)
+}
+
+for(i in 1:length(trends)) {
+  if(
+    !is.numeric(trends[[i]]$hits)
+  ) trends[[i]]$hits <- trends[[i]]$hits |>
+      as.numeric() |> replace_na(0)
+  if(i == 1) {
+    ftrend <- bind_rows(trends[[i]], trends[[i + 1]])
+  } else if(i == 2) {
+    ftrend <- ftrend
+  } else {
+    ftrend <- bind_rows(ftrend, trends[[i]])
+  }
+}
+```
+
+
+```{r}
+ftrend |>
+  left_join(dt) |>
+  left_join(
+    ucdp_acd |>
+      mutate(
+        gwcode = gwno_a,
+        date = round_date(start_date2, "month")
+      ) |>
+      group_by(gwcode, date) |>
+      summarize(
+        onsets = length(unique(conflict_id))
+      )
+  ) |>
+  ungroup() |>
+  mutate(
+    onsets = replace_na(onsets, 0)
+  ) -> dt
+
+dt |>
+  mutate(
+    onset = (onsets > 0) + 0
+  ) -> dt
+```
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(hits, onset) +
+  stat_smooth(
+    method = "glm",
+    method.args = list(family = binomial)
+  ) +
+  labs(
+    title = str_wrap(
+      "A big nothing burger...",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: UCDP's ACD + {gtrends}"
+    ),
+    x = "Google Hits per Country in a Month",
+    y = "Chance of Conflict",
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = percent
+  )
+saveit(1)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+dt |>
+  group_by(gwcode) |>
+  mutate(
+    onset_lead = lead(onset, order_by = date)
+  ) |>
+  ungroup() -> dt
+
+ggplot(dt) +
+  aes(hits, onset_lead) +
+  stat_smooth(
+    method = "glm",
+    method.args = list(family = binomial)
+  ) +
+  labs(
+    title = str_wrap(
+      "A big nothing burger...",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: UCDP's ACD + {gtrends}"
+    ),
+    x = "Google Hits per Country in a Month",
+    y = "Chance of Conflict (next month)",
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = percent
+  )
+saveit(2)
+```
+
+
+```{r}
+#| fig-height: 8
+#| fig-width: 6
+
+library(sjPlot)
+library(patchwork)
+fit <- glm(onset ~ hits + statename, binomial, dt)
+fit_lead <- glm(onset_lead ~ hits + statename, binomial, dt)
+
+plot_model(
+  fit,
+  type = "pred",
+  terms = "hits"
+) +
+  labs(
+    title = NULL,
+    subtitle = "Chance of conflict in the same month",
+    x = "Hits",
+    y = "% Chance"
+  ) -> p1
+
+plot_model(
+  fit_lead,
+  type = "pred",
+  terms = "hits"
+) +
+  labs(
+    title = NULL,
+    subtitle = "Chance of conflict next month",
+    x = "Hits",
+    y = "% Chance"
+  ) -> p2
+
+p1 / p2 +
+  plot_annotation(
+    caption = logo,
+    title = "Predicted chance controlling for\ncountry ID"
+  )
+saveit(3, 8)
+```
+
+```{r}
+#| fig-height: 8
+#| fig-width: 6
+
+dt |>
+  group_by(gwcode) |>
+  mutate(
+    dhits = hits - lag(hits, order_by = date)
+  ) |>
+  ungroup() -> dt
+
+fitd <- glm(onset ~ dhits + statename, binomial, dt)
+fitd_lead <- glm(onset_lead ~ dhits + statename, binomial, dt)
+
+plot_model(
+  fitd,
+  type = "pred",
+  terms = "dhits"
+) +
+  labs(
+    title = NULL,
+    subtitle = "Chance of conflict in the same month",
+    x = expression(Delta*"Hits"),
+    y = "% Chance"
+  ) -> p1
+
+plot_model(
+  fitd_lead,
+  type = "pred",
+  terms = "dhits"
+) +
+  labs(
+    title = NULL,
+    subtitle = "Chance of conflict next month",
+    x = expression(Delta*"Hits"),
+    y = "% Chance"
+  ) -> p2
+
+p1 / p2 +
+  plot_annotation(
+    caption = logo,
+    title = "Predicted chance controlling for\ncountry ID"
+  )
+saveit(4, 8)
+```
+
