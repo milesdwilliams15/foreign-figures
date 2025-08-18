@@ -66,10 +66,10 @@ dt |>
       .names = "{col}_rec"
     ),
     usa_influence = ifelse(
-      american_inf_1 %in% c("Some", "A little", "A lot"), 1, 0
+      american_inf_1 %in% c("Some", "A lot"), 1, 0
     ),
     chn_influence = ifelse(
-      chinese_inf_1 %in% c("Some", "A little", "A lot"), 1, 0
+      chinese_inf_1 %in% c("Some", "A lot"), 1, 0
     ),
     usa_positive = case_when(
       american_inf_2 %in% c("Positive", "Very positive") ~ 1,
@@ -282,7 +282,7 @@ bind_rows(
   ) +
   labs(
     title = str_wrap(
-      "Are American and China influential?",
+      'Share saying that American and China have "some" or "a lot" of influence',
       width = 37
     ),
     subtitle = str_wrap(
@@ -477,7 +477,7 @@ mod_ests |>
   ) +
   geom_label(
     x = .1,
-    y = 3.5,
+    y = 2,
     label = str_wrap(
       "Predictions based on logit models, controlling for gender, minority status, education, age, income, survey year, and country.",
       width = 30
@@ -487,7 +487,7 @@ mod_ests |>
     fontface = "bold",
     size = 3.5
   )
-saveit(5, 7)
+saveit(5, 5, 7)
 ```
 
 ```{r}
@@ -593,6 +593,12 @@ mod_ests |>
     fontface = "bold",
     size = 3.5
   )
-saveit(6, 7)
+saveit(6, 5, 7)
+```
+
+```{r}
+lm(
+  chinese_gov_rec ~ american_gov_rec, dt
+) |> summary()
 ```
 
