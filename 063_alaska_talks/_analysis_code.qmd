@@ -1,0 +1,169 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("navy", "orange"),
+  sequential = c("white", "steelblue"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 6) {
+  ggsave(
+    here(
+      "063_alaska_talks",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+read_csv(
+  here("_data", "micend-1.0.csv")
+) -> dt
+```
+
+```{r}
+
+dt |>
+  mutate(
+    usa = ifelse(
+      str_detect(
+        mediatorname, "United States|USA|2"
+      ) &
+        !str_detect(
+          mediatorname, "200|220|325"
+        ),
+      "US Involved", "US Not Involved"
+    )
+  ) -> dt
+```
+
+
+## Figures
+
+```{r}
+dt |>
+  ct(usa)
+```
+
+```{r}
+dt |>
+  filter(
+    endyear > 1945
+  ) |>
+  ct(usa)
+```
+
+
+
+```{r}
+#| fig-height: 10
+#| fig-width: 6
+dt |>
+  filter(endyear > 1945) |>
+  mutate(
+    withdrawal = (withdrawal > 0) + 0
+  ) |>
+  group_by(usa) |>
+  summarize(
+    across(c(talks:nonstateaggr, releaseaircraft:releasearms),
+           mean)
+  ) |>
+  pivot_longer(-usa) |>
+  mutate(
+    usa = replace_na(usa, "No Mediation")
+  ) |> 
+  mutate(
+    outcome = rep(
+      c(
+        "In-person talks",
+        "Issuementation",
+        "Ceasefire",
+        "Withdrawal",
+        "Reaffirmation",
+        "Border demarcation",
+        "Accept future arbitration",
+        "Wish to commit to future agreements",
+        "Information exchange",
+        "Disarm",
+        "Create new institution",
+        "Cooperation on refugees",
+        "Prisoner of war return",
+        "Third party peacekeepers",
+        "Territory exchange",
+        "Individual travel",
+        "Mediation requested",
+        "Compensation",
+        "Policy change",
+        "Decisive defeat",
+        "Conflict over regime",
+        "Provisions for non-state actors",
+        "Release of aircraft",
+        "Release of personnel",
+        "Release of shipping",
+        "Release of arms"
+      ),
+      len = n()
+    )
+  ) |> 
+  ggplot() +
+  aes(usa, reorder(str_wrap(outcome, 20), value)) +
+  geom_tile(
+    aes(
+      fill = value
+    ),
+    color = "black",
+    show.legend = F
+  ) +
+  geom_text(
+    aes(
+      label = percent(value, 0.01)
+    ),
+    family = "mono",
+    fontface = "bold"
+  ) +
+  ggpal("sequential", "fill") +
+  scale_x_discrete(
+    position = "top"
+  ) +
+  theme(
+    panel.grid.major = element_blank()
+  ) +
+  labs(
+    title = str_wrap(
+      "Conflict endings and US mediation",
+      width = 37
+    ),
+    subtitle = "Militarized Interstate Conflict Endings, 1946-2014",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(1, 10)
+```
+
