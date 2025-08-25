@@ -49,8 +49,11 @@ dt |>
   transmute(
     country_name,
     year,
-    auto = 1 - v2x_polyarchy,
-    pers = v2xnp_pres
+    demo = v2x_polyarchy,
+    pers = v2xnp_pres,
+    auto_bi = ifelse(demo < median(demo, na.rm = T), "Autocracy", "Democracy"),
+    pers_bi = ifelse(pers > median(pers, na.rm = T), "Personalist", "Institutional"),
+    type = paste0(pers_bi, "\n", auto_bi)
   ) -> dt
 ```
 
@@ -58,13 +61,9 @@ dt |>
 
 ```{r}
 dt |>
-  mutate(
-    auto_bi = auto > .5,
-    pers_bi = pers > .5
-  ) |>
   drop_na() |>
-  group_by(auto_bi, pers_bi) |>
-  mean_ci(auto)
+  group_by(type) |>
+  mean_ci(demo)
 ```
 
 ```{r}
@@ -72,23 +71,18 @@ dt |>
 #| fig-width: 6
 
 dt |>
-  mutate(
-    auto_bi = ifelse(auto > .5, "Autocracy", "Democracy"),
-    pers_bi = ifelse(pers > .5, "Personalist", "Institutional"),
-    combo = paste0(pers_bi, "\n", auto_bi)
-  ) |>
   drop_na() |>
-  group_by(combo) |>
-  mean_ci(auto) |>
+  group_by(type) |>
+  mean_ci(demo) |>
   ggplot() +
   aes(
-    x = reorder(combo, mean), 
+    x = reorder(type, -mean), 
     y = mean
   ) +
   geom_col() +
   labs(
     title = str_wrap(
-      "Personalist autocracies have worse overall autocracy scores than other regimes",
+      "Personalist autocracies have worse overall democracy scores than other regimes",
       width = 37
     ),
     subtitle = str_wrap(
@@ -96,7 +90,7 @@ dt |>
       width = 55
     ),
     x = "\nRegime Type",
-    y = "Average Continuous\nAutocracy Score",
+    y = "Quality of Democracy\n(Average)",
     caption = logo
   )
 saveit(1)
@@ -107,19 +101,14 @@ saveit(1)
 #| fig-width: 6
 
 dt |>
-  mutate(
-    auto_bi = ifelse(auto > .5, "Autocracy", "Democracy"),
-    pers_bi = ifelse(pers > .5, "Personalist", "Institutional"),
-    combo = paste0(pers_bi, "\n", auto_bi)
-  ) |>
   drop_na() |>
-  group_by(combo, year) |>
-  mean_ci(auto) |>
+  group_by(type, year) |>
+  mean_ci(demo) |>
   ggplot() +
   aes(
     x = year,
     y = mean,
-    color = combo
+    color = type
   ) +
   geom_point() +
   geom_line() +
@@ -129,7 +118,7 @@ dt |>
   ) +
   labs(
     title = str_wrap(
-      "Personalist autocracies have the worst autocracy scores across time",
+      "Personalist autocracies have the worst democracy scores across time",
       width = 37
     ),
     subtitle = str_wrap(
@@ -137,7 +126,7 @@ dt |>
       width = 55
     ),
     x = NULL,
-    y = "Average Continuous\nAutocracy Score",
+    y = "Quality of Democracy\n(Average)",
     caption = logo,
     color = "Regime Type"
   )
