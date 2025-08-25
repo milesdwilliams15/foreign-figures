@@ -1,0 +1,148 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("navy", "orange"),
+  sequential = c("white", "steelblue"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 6) {
+  ggsave(
+    here(
+      "064_nothing_personal",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+## Data
+
+```{r}
+library(vdemdata)
+
+dt <- vdem
+
+dt |>
+  transmute(
+    country_name,
+    year,
+    auto = 1 - v2x_polyarchy,
+    pers = v2xnp_pres
+  ) -> dt
+```
+
+## Figures
+
+```{r}
+dt |>
+  mutate(
+    auto_bi = auto > .5,
+    pers_bi = pers > .5
+  ) |>
+  drop_na() |>
+  group_by(auto_bi, pers_bi) |>
+  mean_ci(auto)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+dt |>
+  mutate(
+    auto_bi = ifelse(auto > .5, "Autocracy", "Democracy"),
+    pers_bi = ifelse(pers > .5, "Personalist", "Institutional"),
+    combo = paste0(pers_bi, "\n", auto_bi)
+  ) |>
+  drop_na() |>
+  group_by(combo) |>
+  mean_ci(auto) |>
+  ggplot() +
+  aes(
+    x = reorder(combo, mean), 
+    y = mean
+  ) +
+  geom_col() +
+  labs(
+    title = str_wrap(
+      "Personalist autocracies have worse overall autocracy scores than other regimes",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: Varieties of Democracy {vdemdata} R package",
+      width = 55
+    ),
+    x = "\nRegime Type",
+    y = "Average Continuous\nAutocracy Score",
+    caption = logo
+  )
+saveit(1)
+```
+
+```{r}
+#| fig-height: 6
+#| fig-width: 6
+
+dt |>
+  mutate(
+    auto_bi = ifelse(auto > .5, "Autocracy", "Democracy"),
+    pers_bi = ifelse(pers > .5, "Personalist", "Institutional"),
+    combo = paste0(pers_bi, "\n", auto_bi)
+  ) |>
+  drop_na() |>
+  group_by(combo, year) |>
+  mean_ci(auto) |>
+  ggplot() +
+  aes(
+    x = year,
+    y = mean,
+    color = combo
+  ) +
+  geom_point() +
+  geom_line() +
+  ggpal() +
+  guides(
+    color = guide_legend(nrow = 2, ncol = 2)
+  ) +
+  labs(
+    title = str_wrap(
+      "Personalist autocracies have the worst autocracy scores across time",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: Varieties of Democracy {vdemdata} R package",
+      width = 55
+    ),
+    x = NULL,
+    y = "Average Continuous\nAutocracy Score",
+    caption = logo,
+    color = "Regime Type"
+  )
+saveit(2, 6)
+```
+
+
+
