@@ -1,0 +1,437 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("navy", "orange"),
+  sequential = c("white", "steelblue"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 6) {
+  ggsave(
+    here(
+      "065_cbi",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+## Data
+
+```{r}
+## get the data
+haven::read_dta(
+  here("_data", "CBIData_Romelli_2025.dta")
+) -> cbi
+library(globalmacrodata)
+gmd(
+  variables = c("rGDP_USD", "pop", "infl")
+) -> gm
+
+## set the population:
+library(peacesciencer)
+create_stateyears(
+  subset_years = 2000:2023
+) -> dt
+
+## populate dt with cbi + gm variables
+dt |>
+  left_join(
+    cbi |>
+      transmute(
+        year,
+        ccode = countrycode::countrycode(iso_a3, "iso3c", "cown"),
+        cbie_index,
+        cbie_board,
+        cbie_board_q2
+      )
+  ) |>
+  left_join(
+    gm |>
+      transmute(
+        year,
+        ccode = countrycode::countrycode(ISO3, "iso3c", "cown"),
+        gdp = rGDP_USD,
+        inf = infl,
+        pop
+      )
+  ) -> dt
+```
+
+## Figures
+
+
+```{r}
+dt |>
+  drop_na() |>
+  distinct(ccode)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(
+    x = year,
+    y = cbie_index
+  ) +
+  geom_line(
+    aes(group = ccode),
+    linewidth = .1,
+    color = "orange"
+  ) +
+  geom_textsmooth(
+    method = "gam",
+    color = "navy",
+    label = "Mean smoothed trend",
+    linewidth = 1,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  labs(
+    title = str_wrap(
+      "Central bank independence is on the rise, 2000-2023",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: CBIE Index (cbidata.org)"
+    ),
+    x = NULL,
+    y = "Level of Independence",
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = percent,
+    limits = 0:1
+  )
+saveit(1)
+```
+
+Who are the top 5 as of 2023?
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+ggplot(dt |> filter(year == 2023)) +
+  aes(cbie_index) +
+  geom_density(
+    fill = "orange",
+    color = "orange",
+    alpha = .4
+  ) +
+  geom_point(
+    aes(y = -0.1),
+    color = "gray"
+  ) +
+  geom_point(
+    data = . %>%
+      filter(
+        cw_name %in% c(
+          "Vietnam",
+          "Japan", 
+          "United States of America",
+          "United Kingdom",
+          "Germany"
+        )
+      ),
+    aes(y = -.1),
+    color = "navy",
+    size = 2
+  ) +
+  geom_text_repel(
+    data = . %>%
+      mutate(
+        cw_name = ifelse(
+          str_detect(cw_name, "America"),
+          "United States", cw_name
+        )
+      ) %>%
+      filter(
+        cw_name %in% c(
+          "Vietnam",
+          "Japan", 
+          "United States",
+          "United Kingdom",
+          "Germany"
+        )
+      ),
+    aes(y = -.1, label = cw_name),
+    color = "navy",
+    nudge_x = -.1,
+    nudge_y = c(-.4, .4, -.4, .4, -.4),
+    family = "mono",
+    fontface = "bold"
+  ) +
+  labs(
+    title = str_wrap(
+      "There's a wide range of CBI scores in the data",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: CBIE Index (cbidata.org) -- values for 2023"
+    ),
+    x = "Level of Independence",
+    y = "Density of Observations",
+    caption = logo
+  ) +
+  scale_x_continuous(
+    labels = percent,
+    limits = 0:1
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, 5, by = .5)
+  )
+saveit(2)
+```
+
+
+```{r}
+dt |>
+  group_by(cw_name) |>
+  mutate(
+    cbi = cbie_index * 10,
+    lag1 = lag(inf, 1, order_by = year),
+    lag2 = lag(inf, 2, order_by = year)
+  ) -> dt
+
+library(estimatr)
+
+fit1 <- lm_robust(
+  asinh(inf) ~ cbi + lag1 + lag2, 
+  data = dt, 
+  se_type = "stata", 
+  clusters = cw_name
+)
+fit2 <- lm_robust(
+  asinh(inf) ~ cbi + lag1 + lag2, 
+  data = dt, 
+  se_type = "stata", 
+  clusters = cw_name,
+  fixed_effects = ~ year
+)
+fit3 <- lm_robust(
+  asinh(inf) ~ cbi + lag1 + lag2, 
+  data = dt, 
+  se_type = "stata", 
+  clusters = cw_name,
+  fixed_effects = ~ cw_name
+)
+fit4 <- lm_robust(
+  asinh(inf) ~ cbi + lag1 + lag2, 
+  data = dt, 
+  se_type = "stata", 
+  clusters = cw_name,
+  fixed_effects = ~ year + cw_name
+)
+```
+
+```{r}
+#| fig-height: 6
+#| fig-width: 6
+bind_rows(
+  tidy(fit1),
+  tidy(fit2),
+  tidy(fit3),
+  tidy(fit4)
+) |>
+  filter(term == "cbi") |>
+  mutate(
+    model = factor(
+      c("None", "Year", "Country", "Year + Country"),
+      levels = c("None", "Year", "Country", "Year + Country")
+    ),
+    across(
+      c(estimate, conf.low, conf.high),
+      ~ exp(.x) - 1
+    )
+  ) |>
+  ggplot() +
+  aes(
+    x = estimate,
+    y = 1,
+    xmin = conf.low,
+    xmax = conf.high,
+    color = model
+  ) +
+  geom_pointrange(
+    position = position_dodge(-.3)
+  ) +
+  labs(
+    title = str_wrap(
+      "Central bank independence predicts lower inflation",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Estimates from dynamic linear models of asinh-transformed % inflation with cluster-robust 95% confidence intervals",
+      width = 55
+    ),
+    x = str_wrap(
+      "Predicted change per a 10 point increase in central bank independence",
+      width = 50
+    ),
+    y = NULL,
+    caption = logo,
+    color = "Fixed Effects:"
+  ) +
+  scale_x_continuous(
+    labels = percent
+  ) +
+  scale_y_continuous(
+    breaks = NULL
+  ) +
+  geom_vline(
+    xintercept = 0,
+    lty = 2
+  ) +
+  ggpal()
+saveit(3, 6)
+```
+
+```{r}
+dt |>
+  mutate(
+    cbie_board_q2 = (cbie_board_q2 > 0)+0
+  ) -> dt
+fit5 <- lm_robust(
+  asinh(inf) ~ cbie_board_q2 + lag1 + lag2, 
+  data = dt, 
+  se_type = "stata", 
+  clusters = cw_name
+)
+fit6 <- lm_robust(
+  asinh(inf) ~ cbie_board_q2 + lag1 + lag2, 
+  data = dt, 
+  se_type = "stata", 
+  clusters = cw_name,
+  fixed_effects = ~ year
+)
+fit7 <- lm_robust(
+  asinh(inf) ~ cbie_board_q2 + lag1 + lag2, 
+  data = dt, 
+  se_type = "stata", 
+  clusters = cw_name,
+  fixed_effects = ~ cw_name
+)
+fit8 <- lm_robust(
+  asinh(inf) ~ cbie_board_q2 + lag1 + lag2, 
+  data = dt, 
+  se_type = "stata", 
+  clusters = cw_name,
+  fixed_effects = ~ year + cw_name
+)
+```
+
+```{r}
+#| fig-height: 6
+#| fig-width: 6
+bind_rows(
+  tidy(fit5),
+  tidy(fit6),
+  tidy(fit7),
+  tidy(fit8)
+) |>
+  filter(term == "cbie_board_q2") |>
+  mutate(
+    model = factor(
+      c("None", "Year", "Country", "Year + Country"),
+      levels = c("None", "Year", "Country", "Year + Country")
+    ),
+    across(
+      c(estimate, conf.low, conf.high),
+      ~ 100 * (exp(.x) - 1)
+    )
+  ) |>
+  ggplot() +
+  aes(
+    x = estimate,
+    y = 1,
+    xmin = conf.low,
+    xmax = conf.high,
+    color = model
+  ) +
+  geom_pointrange(
+    position = position_dodge(-.3)
+  ) +
+  labs(
+    title = str_wrap(
+      "Central bank independence predicts greater GDP per capita (depending on how you model it)",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Estimates from dynamic linear models of logged GDP per capita with cluster-robust 95% confidence intervals",
+      width = 55
+    ),
+    x = str_wrap(
+      "Predicted % change in GDP/capita per a 10 percentage point increase in independence",
+      width = 50
+    ),
+    y = NULL,
+    caption = logo,
+    color = "Fixed Effects:"
+  ) +
+  scale_y_continuous(
+    breaks = NULL
+  ) +
+  geom_vline(
+    xintercept = 0,
+    lty = 2
+  ) +
+  ggpal()
+saveit(4, 6)
+```
+
+
+```{r}
+dt |>
+  filter(
+    cw_name %in% c("Turkey", "United States of America")
+  ) |> view()
+cbi |>
+  filter(
+    country == "Turkey"
+  ) |>
+  view()
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+dt |>
+  filter(
+    cw_name == "Turkey"
+  ) |>
+  ggplot() +
+  aes(
+    x = year,
+    y = inf
+  ) +
+  geom_point() +
+  geom_line()
+```
+
