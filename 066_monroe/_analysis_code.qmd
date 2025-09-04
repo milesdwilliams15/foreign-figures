@@ -1,0 +1,191 @@
+---
+title: "Monroe Doctrine"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("navy", "orange"),
+  sequential = c("white", "steelblue"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 6) {
+  ggsave(
+    here(
+      "066_monroe",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(peacesciencer)
+
+create_dyadyears() -> dt
+
+read_csv(
+  here("_data", "mie-1.0.csv")
+) -> mie
+
+full_join(
+  dt, mie, by = c("ccode1", "ccode2", "year" = "styear")
+) -> jdt
+
+jdt |> 
+  group_by(ccode1, ccode2, year) |>
+  summarize(
+    events = sum(!is.na(eventnum)),
+    hostlev = ifelse(
+      !is.na(hostlev),
+      max(hostlev),
+      0
+    ),
+    across(
+      starts_with("fatal"),
+      ~ sum(.x, na.rm = T)
+    )
+  ) -> fdt
+
+fdt |>
+  ungroup() |>
+  mutate(
+    usa = ifelse(
+      ccode1 == 2 | ccode2 == 2,
+      1, 0
+    ),
+    region1 = countrycode::countrycode(
+      ccode1, "cown", "region"
+    ),
+    region2 = countrycode::countrycode(
+      ccode2, "cown", "region"
+    )
+  ) -> fdt
+
+fdt |>
+  mutate(
+    sac = ifelse(
+      region1 == "Latin America & Caribbean" |
+        region2 == "Latin America & Caribbean", 
+      "Latin America & Caribbean", "Other Regions"
+    )
+  ) -> fdt
+
+fdt |>
+  distinct() -> fdt
+
+fdt |>
+  filter(usa == 1, year < 2015) -> ffdt
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+ggplot(ffdt |> filter(ccode1 == 2)) +
+  aes(year, events, color = sac) +
+  stat_smooth(
+    method = "gam",
+    method.args = list(family = quasipoisson),
+    se = F
+  ) +
+  geom_textvline(
+    xintercept = 1823,
+    label = "Monroe Doctrine\nBegins",
+    color = "gray20",
+    family = "mono",
+    fontface = "bold.italic"
+  ) +
+  ggpal("binary") +
+  labs(
+    title = str_wrap(
+      "U.S. aggression in the western hemisphere spikes after the initiation of the Monroe Doctrine",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: Militarized Interstate Events dataset, 1816-2014"
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = "Smoothed average no. of events\nagainst countries in..."
+  )
+saveit(1)
+```
+
+```{r}
+ffdt |>
+  filter(year %in% 1823:1870, events > 0) |>
+  mutate(
+    ccode1 = countrycode::countrycode(
+      ccode1, "cown", "country.name"
+    ),
+    ccode2 = countrycode::countrycode(
+      ccode2, "cown", "country.name"
+    )
+  ) |>
+  view()
+```
+
+
+```{r}
+ffdt |>
+  filter(year > 2000, events > 0) |>
+  mutate(
+    ccode1 = countrycode::countrycode(
+      ccode1, "cown", "country.name"
+    ),
+    ccode2 = countrycode::countrycode(
+      ccode2, "cown", "country.name"
+    )
+  ) |>
+  view()
+```
+
+```{r}
+mie |>
+  filter(ccode1 %in% c(2, 101) & ccode2 %in% c(2, 101)) |>
+  filter(styear > 2000) |>
+  view()
+```
+
+```{r}
+ffdt |>
+  filter(
+    ccode1 == 70 | ccode2 == 70,
+    year <= 1860
+  ) |>
+  mutate(
+    init = ifelse(ccode1 == 2, "USA", "MEX")
+  ) |>
+  ggplot() +
+  aes(year, events, color = init) +
+  geom_line() +
+  geom_point() +
+  ggpal("binary")
+```
+
