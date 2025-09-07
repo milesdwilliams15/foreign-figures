@@ -44,61 +44,134 @@ saveit <- function(num = 1, ht = 5, wd = 6) {
 ```{r}
 library(peacesciencer)
 
-create_dyadyears() -> dt
+create_dyadyears("gw", subset_years = 1946:2024) -> dt
 
-read_csv(
-  here("_data", "mie-1.0.csv")
-) -> mie
-
-full_join(
-  dt, mie, by = c("ccode1", "ccode2", "year" = "styear")
-) -> jdt
-
-jdt |> 
-  group_by(ccode1, ccode2, year) |>
-  summarize(
-    events = sum(!is.na(eventnum)),
-    hostlev = ifelse(
-      !is.na(hostlev),
-      max(hostlev),
-      0
-    ),
-    across(
-      starts_with("fatal"),
-      ~ sum(.x, na.rm = T)
-    )
-  ) -> fdt
-
-fdt |>
-  ungroup() |>
+  bind_rows(
+    ucdp_acd |>
+      transmute(
+        gwcode1 = gwno_a,
+        gwcode2 = gwno_b,
+        year,
+        intensity_level
+      ) |>
+      group_by(gwcode1, gwcode2, year) |>
+      summarize(
+        ac = 1,
+        maxintensity = max(intensity_level)
+      ),
+    ucdp_acd |> 
+      transmute(
+        gwcode1 = gwno_a_2nd,
+        gwcode2 = gwno_b_2nd,
+        year,
+        intensity_level
+      ) |>
+      group_by(gwcode1, gwcode2, year) |>
+      summarize(
+        ac = 1,
+        maxintensity = max(intensity_level)
+      ),
+    ucdp_acd |> 
+      transmute(
+        gwcode1 = gwno_a,
+        gwcode2 = gwno_b_2nd,
+        year,
+        intensity_level
+      ) |>
+      group_by(gwcode1, gwcode2, year) |>
+      summarize(
+        ac = 1,
+        maxintensity = max(intensity_level)
+      ),
+    ucdp_acd |> 
+      transmute(
+        gwcode1 = gwno_a_2nd,
+        gwcode2 = gwno_b,
+        year,
+        intensity_level
+      ) |>
+      group_by(gwcode1, gwcode2, year) |>
+      summarize(
+        ac = 1,
+        maxintensity = max(intensity_level)
+      )
+  ) |> drop_na() -> ft
+  
+dt |>
+  left_join(
+    ft
+  ) |>
   mutate(
-    usa = ifelse(
-      ccode1 == 2 | ccode2 == 2,
-      1, 0
-    ),
-    region1 = countrycode::countrycode(
-      ccode1, "cown", "region"
-    ),
-    region2 = countrycode::countrycode(
-      ccode2, "cown", "region"
-    )
-  ) -> fdt
-
-fdt |>
-  mutate(
-    sac = ifelse(
-      region1 == "Latin America & Caribbean" |
-        region2 == "Latin America & Caribbean", 
-      "Latin America & Caribbean", "Other Regions"
-    )
-  ) -> fdt
-
-fdt |>
-  distinct() -> fdt
-
-fdt |>
-  filter(usa == 1, year < 2015) -> ffdt
+    ac = replace_na(ac, 0)
+  ) -> dt
 ```
+
+
+```{r}
+create_stateyears(
+  "gw", subset_years = 1946:2024
+) -> dt
+
+bind_rows(
+  ucdp_acd |>
+    transmute(
+      gwcode = gwno_a,
+      year,
+      conflict_id,
+      intensity_level,
+      type_of_conflict
+    ) |>
+    group_by(gwcode, year, conflict_id) |>
+    mutate(
+      init = (row_number() == 1) + 0
+    ) |>
+    ungroup(),
+  ucdp_acd |>
+    transmute(
+      gwcode = gwno_a_2nd,
+      year,
+      conflict_id,
+      intensity_level,
+      type_of_conflict,
+      init = 0
+    ),
+  ucdp_acd |>
+    transmute(
+      gwcode = gwno_b,
+      year,
+      conflict_id,
+      intensity_level,
+      type_of_conflict,
+      init = 0
+    ),
+  ucdp_acd |>
+    transmute(
+      gwcode = gwno_b_2nd,
+      year,
+      conflict_id,
+      intensity_level,
+      type_of_conflict,
+      init = 0
+    )
+) |>
+  drop_na(gwcode) |>
+  group_by(gwcode, year) |>
+  summarize(
+    total = length(unique(conflict_id)),
+    wars  = length(unique(conflict_id[intensity_level == 2])),
+    init  = length(unique(conflict_id[init == 1]))
+  ) -> ft
+
+dt |>
+  left_join(ft) -> dt
+
+dt |>
+  mutate(
+    across(c(total:wars, init), ~ replace_na(.x, 0))
+  ) -> dt
+```
+
+
 
 
 ## Figures
@@ -106,86 +179,160 @@ fdt |>
 ```{r}
 #| fig-height: 5
 #| fig-width: 6
-ggplot(ffdt |> filter(ccode1 == 2)) +
-  aes(year, events, color = sac) +
-  stat_smooth(
-    method = "gam",
-    method.args = list(family = quasipoisson),
-    se = F
+
+dt |>
+  filter(gwcode == 2) |>
+  ggplot() +
+  aes(year, total) +
+  geom_point(color = "navy") +
+  geom_line(color = "navy") +
+  geom_ribbon(
+    data = . %>%
+      filter(year %in% 2017:2021),
+    aes(
+      ymax = Inf,
+      ymin = -Inf
+    ),
+    alpha = 0.4
   ) +
-  geom_textvline(
-    xintercept = 1823,
-    label = "Monroe Doctrine\nBegins",
-    color = "gray20",
-    family = "mono",
-    fontface = "bold.italic"
-  ) +
-  ggpal("binary") +
   labs(
     title = str_wrap(
-      "U.S. aggression in the western hemisphere spikes after the initiation of the Monroe Doctrine",
+      "The U.S. was involved in more armed conflicts during Trump 1.0 than at any other time since WWII",
       width = 37
     ),
     subtitle = str_wrap(
-      "Source: Militarized Interstate Events dataset, 1816-2014"
+      "Source: UCDP-ACD via {peacesciencer}"
     ),
     x = NULL,
     y = NULL,
-    caption = logo,
-    color = "Smoothed average no. of events\nagainst countries in..."
+    caption = logo
+  ) +
+  geom_text(
+    x = 2000,
+    y = 5,
+    label = "# of U.S.\nconflicts",
+    color = "navy",
+    family = "mono",
+    fontface = "bold"
   )
 saveit(1)
 ```
 
+
 ```{r}
-ffdt |>
-  filter(year %in% 1823:1870, events > 0) |>
-  mutate(
-    ccode1 = countrycode::countrycode(
-      ccode1, "cown", "country.name"
+#| fig-height: 5
+#| fig-width: 6
+
+dt |>
+  filter(gwcode == 2) |>
+  ggplot() +
+  aes(year, wars) +
+  geom_point(color = "navy") +
+  geom_line(color = "navy") +
+  geom_ribbon(
+    data = . %>%
+      filter(year %in% 2017:2021),
+    aes(
+      ymax = Inf,
+      ymin = -Inf
     ),
-    ccode2 = countrycode::countrycode(
-      ccode2, "cown", "country.name"
-    )
-  ) |>
-  view()
-```
-
-
-```{r}
-ffdt |>
-  filter(year > 2000, events > 0) |>
-  mutate(
-    ccode1 = countrycode::countrycode(
-      ccode1, "cown", "country.name"
+    alpha = 0.4
+  ) +
+  labs(
+    title = str_wrap(
+      "U.S. involvement in wars (> 1,000 battle deaths) declined during Trump 1.0 after a historic peak at the end of Obama's presidency",
+      width = 37
     ),
-    ccode2 = countrycode::countrycode(
-      ccode2, "cown", "country.name"
-    )
-  ) |>
-  view()
+    subtitle = str_wrap(
+      "Source: UCDP-ACD via {peacesciencer}"
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  geom_text(
+    x = 2000,
+    y = 3.5,
+    label = "# of wars with\nU.S. involvement",
+    color = "navy",
+    family = "mono",
+    fontface = "bold"
+  )
+saveit(2)
 ```
 
 ```{r}
-mie |>
-  filter(ccode1 %in% c(2, 101) & ccode2 %in% c(2, 101)) |>
-  filter(styear > 2000) |>
-  view()
-```
+#| fig-height: 5
+#| fig-width: 6
 
-```{r}
-ffdt |>
-  filter(
-    ccode1 == 70 | ccode2 == 70,
-    year <= 1860
-  ) |>
-  mutate(
-    init = ifelse(ccode1 == 2, "USA", "MEX")
+ucdp_acd |>
+  group_by(year) |>
+  summarize(
+    total = length(unique(conflict_id))
   ) |>
   ggplot() +
-  aes(year, events, color = init) +
-  geom_line() +
-  geom_point() +
-  ggpal("binary")
+  aes(year, total) +
+  geom_point(color = "navy") +
+  geom_line(color = "navy") +
+  labs(
+    title = str_wrap(
+      "The number of armed conflicts in the world has reached historic hights",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: UCDP-ACD via {peacesciencer}"
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  geom_text(
+    x = 1980,
+    y = 55,
+    label = "# of ongoing\narmed conflicts",
+    color = "navy",
+    family = "mono",
+    fontface = "bold"
+  )
+saveit(3)
 ```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+dt |>
+  group_by(year) |>
+  summarize(
+    total = sum(total > 0)
+  ) |>
+  ggplot() +
+  aes(year, total) +
+  geom_point(color = "navy") +
+  geom_line(color = "navy") +
+  labs(
+    title = str_wrap(
+      "The number of countries involved in armed conflicts has been increasing substantially",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: UCDP-ACD via {peacesciencer}"
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  geom_text(
+    x = 1980,
+    y = 95,
+    label = "# of countries\ninvolved in conflicts",
+    color = "navy",
+    family = "mono",
+    fontface = "bold"
+  )
+saveit(4)
+```
+
+
 
