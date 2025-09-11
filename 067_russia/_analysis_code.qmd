@@ -82,13 +82,13 @@ ggplot(dt) +
   geom_text(
     x = 2007.5,
     y = 950000,
-    label = "Russia's Real GDP\nper Capita",
+    label = "Russia's Real GDP\nper Capita in Rubles",
     color = "navy",
     family = "mono",
     fontface = "bold"
   ) +
   scale_y_continuous(
-    labels = dollar
+    labels = comma
   ) +
   labs(
     title = str_wrap(
@@ -115,7 +115,7 @@ ggplot(dt) +
     aes(y = exports / 1e06),
     linewidth = 1,
     color = "navy",
-    label = "Exports",
+    label = "Exports (Rubles)",
     family = "mono",
     fontface = "bold",
     text_smoothing = 50
@@ -124,7 +124,7 @@ ggplot(dt) +
     aes(y = imports / 1e06),
     linewidth = 1,
     color = "darkorange",
-    label = "Imports",
+    label = "Imports (Rubles)",
     family = "mono",
     fontface = "bold",
     text_smoothing = 50
@@ -139,7 +139,7 @@ ggplot(dt) +
     linewidth = 1
   ) +
   scale_y_continuous(
-    labels = ~ paste0("$", .x, " tril.")
+    labels = ~ paste0(.x, " tril.")
   ) +
   labs(
     title = str_wrap(
