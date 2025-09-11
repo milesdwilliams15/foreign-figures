@@ -1,0 +1,341 @@
+---
+title: "How's Russia Doing?"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("navy", "orange"),
+  sequential = c("white", "steelblue"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 6) {
+  ggsave(
+    here(
+      "067_russia",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(globalmacrodata)
+
+gmd(
+  country = "RUS"
+) -> dt
+
+dt |>
+  filter(
+    year %in% 2000:2025
+  ) -> dt
+```
+
+## Figures
+
+Let's look at:
+
+* rGDP_pc
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(year, rGDP_pc) +
+  geom_line(
+    linewidth = 1,
+    color = "navy"
+  ) +
+  geom_textvline(
+    xintercept = 2022,
+    label = "Russia Invades\nUkraine",
+    color = "darkorange",
+    family = "mono",
+    fontface = "bold.italic",
+    hjust = .1,
+    linewidth = 1
+  ) +
+  geom_text(
+    x = 2007.5,
+    y = 950000,
+    label = "Russia's Real GDP\nper Capita",
+    color = "navy",
+    family = "mono",
+    fontface = "bold"
+  ) +
+  scale_y_continuous(
+    labels = dollar
+  ) +
+  labs(
+    title = str_wrap(
+      "Russia's economic growth is still fine after invading Ukraine",
+      width = 37
+    ),
+    subtitle = "Source: Global Macro Database, 2000-2025",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(1)
+```
+
+* imports + exports
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(year) +
+  geom_textline(
+    aes(y = exports / 1e06),
+    linewidth = 1,
+    color = "navy",
+    label = "Exports",
+    family = "mono",
+    fontface = "bold",
+    text_smoothing = 50
+  ) +
+  geom_textline(
+    aes(y = imports / 1e06),
+    linewidth = 1,
+    color = "darkorange",
+    label = "Imports",
+    family = "mono",
+    fontface = "bold",
+    text_smoothing = 50
+  ) +
+  geom_textvline(
+    xintercept = 2022,
+    label = "Russia Invades\nUkraine",
+    color = "darkorange",
+    family = "mono",
+    fontface = "bold.italic",
+    hjust = .1,
+    linewidth = 1
+  ) +
+  scale_y_continuous(
+    labels = ~ paste0("$", .x, " tril.")
+  ) +
+  labs(
+    title = str_wrap(
+      "Russia's import and export growth have been suppressed after invading Ukraine",
+      width = 37
+    ),
+    subtitle = "Source: Global Macro Database, 2000-2025",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(2)
+```
+
+* govdef
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(year, govdef_GDP) +
+  geom_line(
+    linewidth = 1,
+    color = "navy"
+  ) +
+  geom_textvline(
+    xintercept = 2022,
+    label = "Russia Invades\nUkraine",
+    color = "darkorange",
+    family = "mono",
+    fontface = "bold.italic",
+    hjust = .9,
+    linewidth = 1
+  ) +
+  geom_text(
+    x = 2002.5,
+    y = -2,
+    label = "Russia's gov't\ndeficit per GDP",
+    color = "navy",
+    family = "mono",
+    fontface = "bold"
+  ) +
+  geom_hline(
+    yintercept = 0,
+    lty = 2,
+    linewidth = 1,
+    color = "black"
+  ) +
+  scale_y_continuous(
+    labels = ~ paste0(.x, "%")
+  ) +
+  labs(
+    title = str_wrap(
+      "Russia's running a budget deficit, but it's no worse on average than before it invaded Ukraine",
+      width = 37
+    ),
+    subtitle = "Source: Global Macro Database, 2000-2025",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(3)
+```
+
+* cbrate
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(year, cbrate) +
+  geom_line(
+    linewidth = 1,
+    color = "navy"
+  ) +
+  geom_textvline(
+    xintercept = 2022,
+    label = "Russia Invades\nUkraine",
+    color = "darkorange",
+    family = "mono",
+    fontface = "bold.italic",
+    hjust = .9,
+    linewidth = 1
+  ) +
+  geom_text(
+    x = 2008.5,
+    y = 17.5,
+    label = "Russia's central bank\ninterest rate",
+    color = "navy",
+    family = "mono",
+    fontface = "bold"
+  ) +
+  scale_y_continuous(
+    labels = ~ paste0(.x, "%")
+  ) +
+  labs(
+    title = str_wrap(
+      "Russia's interest rates increased after invading Ukraine",
+      width = 37
+    ),
+    subtitle = "Source: Global Macro Database, 2000-2025",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(4)
+```
+
+* infl
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(year, infl) +
+  geom_line(
+    linewidth = 1,
+    color = "navy"
+  ) +
+  geom_textvline(
+    xintercept = 2022,
+    label = "Russia Invades\nUkraine",
+    color = "darkorange",
+    family = "mono",
+    fontface = "bold.italic",
+    hjust = .9,
+    linewidth = 1
+  ) +
+  geom_text(
+    x = 2008.5,
+    y = 17.5,
+    label = "Russia's inflation rate",
+    color = "navy",
+    family = "mono",
+    fontface = "bold"
+  ) +
+  scale_y_continuous(
+    labels = ~ paste0(.x, "%")
+  ) +
+  labs(
+    title = str_wrap(
+      "Inflation spiked in Russia after invading Urkaine, but it has subsided",
+      width = 37
+    ),
+    subtitle = "Source: Global Macro Database, 2000-2025",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(5)
+```
+
+* unemp
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(year, unemp) +
+  geom_line(
+    linewidth = 1,
+    color = "navy"
+  ) +
+  geom_textvline(
+    xintercept = 2022,
+    label = "Russia Invades\nUkraine",
+    color = "darkorange",
+    family = "mono",
+    fontface = "bold.italic",
+    hjust = .9,
+    linewidth = 1
+  ) +
+  geom_text(
+    x = 2008,
+    y = 5,
+    label = "Russia's unemployment rate",
+    color = "navy",
+    family = "mono",
+    fontface = "bold"
+  ) +
+  scale_y_continuous(
+    labels = ~ paste0(.x, "%")
+  ) +
+  labs(
+    title = str_wrap(
+      "Russia's unemployment has continued its steady downward trajectory, even after invading Ukraine",
+      width = 37
+    ),
+    subtitle = "Source: Global Macro Database, 2000-2025",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(6)
+```
