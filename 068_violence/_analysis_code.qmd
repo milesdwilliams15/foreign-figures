@@ -1,0 +1,143 @@
+---
+title: "Political Violence Trends"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange", "navy"),
+  sequential = c("white", "steelblue"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 6) {
+  ggsave(
+    here(
+      "068_violence",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+dt <- read_csv(
+  here("_data", "acled_nonstate_violence.csv")
+)
+
+dt <- dt |> # only have coverage for very country >= 2021
+  filter(
+    event_date >= "2021-01-01",
+    event_date < "2025-09-01"
+  )
+```
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+dt |>
+  group_by(event_date) |>
+  summarize(
+    Events = sum(attacks),
+    Fatalities = sum(attack_fatalities)
+  ) |>
+  pivot_longer(
+    -event_date
+  ) |>
+  ggplot() +
+  aes(event_date, value) +
+  geom_line(aes(color = "Raw count"), linewidth = 1) +
+  geom_smooth(
+    aes(color = "Smoothed trend"),
+    se = F
+  ) +
+  facet_wrap(~ name, scales = "free_y") +
+  scale_y_continuous(
+    labels = comma
+  ) +
+  labs(
+    x = NULL,
+    y = NULL,
+    title = str_wrap(
+      "Gobal terrorist attacks and fatalities on the rise since 2021",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Monthy counts shown from Jan. 2021 to Aug. 2025 (source: ACLED)",
+      width = 55
+    ),
+    caption = logo,
+    color = NULL
+  ) +
+  ggpal("binary")
+saveit(1)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+dt |>
+  filter(ccode == 2) |>
+  transmute(
+    event_date,
+    Events = attacks,
+    Fatalities = attack_fatalities
+  ) |>
+  pivot_longer(
+    -event_date
+  ) |>
+  ggplot() +
+  aes(event_date, value) +
+  geom_line(aes(color = "Raw count"), linewidth = 1) +
+  geom_smooth(
+    aes(color = "Smoothed trend"),
+    se = F
+  ) +
+  facet_wrap(~ name, scales = "free_y") +
+  scale_y_continuous(
+    labels = comma
+  ) +
+  labs(
+    x = NULL,
+    y = NULL,
+    title = str_wrap(
+      "Terrorist attacks and fatalities fluctuated in the United States since 2021 but are on the rise in 2025",
+      37
+    ),
+    subtitle = str_wrap(
+      "Monthy counts for the U.S. shown from Jan. 2021 to Aug. 2025 (source: ACLED)",
+      width = 55
+    ),
+    caption = logo,
+    color = NULL
+  ) +
+  ggpal("binary")
+saveit(2)
+```
+
+
