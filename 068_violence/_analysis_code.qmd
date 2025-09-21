@@ -50,6 +50,9 @@ dt <- dt |> # only have coverage for very country >= 2021
   filter(
     event_date >= "2021-01-01",
     event_date < "2025-09-01"
+  ) |> 
+  mutate(
+    year = ifelse(year == 2020, 2021, year)
   )
 ```
 
@@ -126,7 +129,7 @@ dt |>
     x = NULL,
     y = NULL,
     title = str_wrap(
-      "Terrorist attacks and fatalities fluctuated in the United States since 2021 but are on the rise in 2025",
+      "Terrorist attacks and fatalities in the U.S. peaked in 2022 but have trended upward again in 2025",
       37
     ),
     subtitle = str_wrap(
@@ -141,3 +144,200 @@ saveit(2)
 ```
 
 
+```{r}
+library(globalmacrodata)
+gm <- gmd()
+gm |>
+  transmute(
+    ccode = countrycode::countrycode(ISO3, "iso3c", "cown"),
+    year,
+    pop
+  ) -> gm
+
+dt |>
+  left_join(
+    gm, by = c("ccode", "year")
+  ) -> dt
+
+dt |>
+  mutate(
+    pop = pop * 1e06
+  ) -> dt
+```
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  mutate(
+    year = floor_date(event_date, "year")
+  ) |>
+  group_by(ccode, year) |>
+  summarize(
+    deaths = sum(attack_fatalities),
+    pop = unique(pop),
+    .groups = "drop"
+  ) |>
+  drop_na() |>
+  group_by(year) |>
+  summarize(
+    deaths_pc = 1e06 * sum(deaths) / sum(pop),
+    .groups = "drop"
+  ) |>
+  mutate(
+    labs = ifelse(
+      year == "2025-01-01",
+      paste0(round(deaths_pc, 2), "\n(so far)"),
+      paste0(round(deaths_pc, 2))
+    )
+  ) |>
+  ggplot() +
+  aes(year, deaths_pc) +
+  geom_col(
+    fill = "navy"
+  ) +
+  geom_text(
+    aes(label = labs),
+    color = "orange",
+    vjust = 1.5,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  labs(
+    title = str_wrap(
+      "Global deaths from terrorist attacks are persistent but rare",
+      width = 37
+    ),
+    subtitle = "Global deaths per 1 million (Sources: ACLED and GMD)",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_y_continuous(breaks = NULL) +
+  theme(panel.grid.major = element_blank())
+saveit(3, 4)
+```
+
+
+```{r}
+dt |>
+  mutate(
+    year = floor_date(event_date, "year"),
+    uspop = max(pop[ccode == 2])
+  ) |>
+  group_by(ccode) |>
+  summarize(
+    deaths_pc = unique(uspop) * sum(attack_fatalities) / max(pop)
+  ) |>
+  mutate(
+    regions = countrycode::countrycode(
+      ccode, "cown", "continent"
+    ),
+    names = countrycode::countrycode(
+      ccode, "cown", "country.name"
+    )
+  ) -> smry
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+smry |>
+  mutate(
+    label = paste0(
+      round(rank(-deaths_pc)), ". ", names
+    )
+  ) |>
+  arrange(-deaths_pc) |>
+  filter(
+    row_number() <= 10 | ccode == 2
+  ) |>
+  ggplot() +
+  aes(
+    x = deaths_pc,
+    y = reorder(label, deaths_pc)
+  ) +
+  geom_col(
+    fill = "navy"
+  ) +
+  geom_text(
+    aes(label = comma(round(deaths_pc))),
+    color = c(rep("orange", len = 10), "navy"),
+    family = "mono",
+    fontface = "bold",
+    hjust = c(rep(1.1, len = 10), -.1)
+  ) +
+  theme(
+    panel.grid.major = element_blank(),
+    axis.text.x = element_blank()
+  ) +
+  labs(
+    title = str_wrap(
+      "The U.S. isn't the global hotspot for violent terrorism",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Accumulated deaths (Jan. 2021 - Aug. 2025) normalized to the size of the U.S. population in 2025",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(4)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+smry |>
+  mutate(
+    label = paste0(
+      round(rank(-deaths_pc)), ". ", names
+    )
+  ) |>
+  arrange(-deaths_pc) |>
+  filter(
+    regions == "Europe" | ccode %in% c(2, 20, 740)
+  ) |>
+  filter(!(names %in% c("Ukraine", "Russia", "Montenegro"))) |>
+  filter(deaths_pc > 0) |>
+  ggplot() +
+  aes(
+    x = deaths_pc,
+    y = reorder(label, deaths_pc)
+  ) +
+  geom_col(
+    fill = "navy"
+  ) +
+  geom_text(
+    aes(label = comma(round(deaths_pc))),
+    color = c(rep("orange", len = 13), rep("navy", len = 5)),
+    family = "mono",
+    fontface = "bold",
+    hjust = c(rep(1.1, len = 13), rep(-.1, len = 5))
+  ) +
+  theme(
+    panel.grid.major = element_blank(),
+    axis.text.x = element_blank()
+  ) +
+  labs(
+    title = str_wrap(
+      "The U.S. is a hotspot for violent terrorism among industrialized countries",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Accumulated deaths (Jan. 2021 - Aug. 2025) normalized to the size of the U.S. population in 2025",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(5)
+```
