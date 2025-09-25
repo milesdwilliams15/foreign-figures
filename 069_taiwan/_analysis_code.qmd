@@ -1,0 +1,293 @@
+---
+title: "Taiwanese Sovereignty"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange", "navy"),
+  sequential = c("white", "steelblue"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 6) {
+  ggsave(
+    here(
+      "069_taiwan",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(peacesciencer)
+# devtools::install_github("milesdwilliams15/odadata")
+library(odadata)
+
+create_stateyears(subset_years = 2000:2021) |>
+  add_gcdf() |>
+  #filter_rdr("chinese") |>
+  add_sim_gdp_pop() -> dt
+
+read_csv(
+  here("_data", "taiwan_recognition.csv")
+) -> tw
+
+tw |>
+  janitor::clean_names() -> tw
+
+tw |>
+  mutate(
+    ccode = countrycode::countrycode(
+      country, "country.name", "cown"
+    )
+  ) -> tw
+
+tw |>
+  mutate(
+    year = ifelse(year_relations_severed == "ongoing", "2025",
+                  year_relations_severed)
+  ) |>
+  mutate(
+    twyear = as.numeric(year)
+  ) |>
+  drop_na() |>
+  select(ccode, twyear) -> tw
+
+dt |>
+  left_join(tw) |>
+  mutate(
+    tw = ifelse(
+      year < twyear, 1, 0
+    ) |> replace_na(0)
+  ) -> dt
+```
+
+## Figures
+
+```{r}
+#| fig-height: 6
+#| fig-width: 6
+
+dt |>
+  filter_rdr("china") |>
+  group_by(year) |>
+  summarize(
+    across(ends_with("amt"), sum)
+  ) |>
+  pivot_longer(-year) |>
+  mutate(
+    name = rep(
+      c("OOF", "ODA", "Vague"),
+      len = n()
+    )
+  ) |>
+  ggplot() +
+  aes(year, value, color = name) +
+  geom_line(
+    linewidth = 1
+  ) +
+  geom_smooth(
+    method = "lm",
+    se = F,
+    lty = 2
+  ) +
+  ggpal() +
+  labs(
+    title = str_wrap(
+      "China's overseas development financing has increased dramatically over time, but mostly due to overseas loans (OOF)",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Shown: Commitments in billions of 2021 USD by year"
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = "Flow type:"
+  ) +
+  scale_y_continuous(
+    labels = ~ paste0("$", .x / 1e09, " bil")
+  )
+saveit(1, 6, 6)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+dt |>
+  group_by(year) |>
+  summarize(
+    n = sum(tw, na.rm = T)
+  ) |>
+  ggplot() +
+  aes(year, n) +
+  geom_line(
+    linewidth = 1
+  ) +
+  geom_label(
+    data = . %>%
+      filter(year %in% c(2000, 2021)),
+    aes(label = n),
+    family = "mono",
+    fontface = "bold"
+  ) +
+  geom_text(
+    x = 2010,
+    y = 25,
+    label = "Countries that recognize\nTaiwan",
+    family = "mono",
+    fontface = "bold"
+  ) +
+  labs(
+    title = str_wrap(
+      "The number of countries recognizing Taiwan has steadly declined over time",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Source: World Population Review"
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(2)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 8
+dt |>
+  filter_rdr("china") |>
+  # group_by(ccode) |>
+  # mutate(
+  #   flip = (mean(tw) > 0 & mean(tw) < 1)+0
+  # ) |>
+  # filter(flip == 1) |>
+  filter(
+    cw_name %in% c(
+      "El Salvador",
+      "Dominican Republic",
+      "Nicaragua"
+    ),
+    year >= 2015
+  ) |>
+  ggplot() +
+  aes(year, oda_amt) +
+  geom_line(
+    linewidth = 1
+  ) +
+  geom_point(
+    aes(color = ifelse(tw == 1, "Before", "After") |>
+          factor(levels = c("Before", "After"))),
+    size = 2
+  ) +
+  geom_vline(
+    aes(xintercept = twyear),
+    lty = 2,
+    color = "firebrick"
+  ) +
+  facet_wrap(~ cw_name, scales = "free_y") +
+  ggpal("binary") +
+  theme(
+    panel.grid.major.x = element_blank()
+  ) +
+  labs(
+    title = str_wrap(
+      "Three Latin American countries got access to Chinese ODA after they ended diplomatic recognition of Taiwan",
+      width = 53
+    ),
+    subtitle = str_wrap(
+      "Shown: Chinese ODA commitments in millions of 2021 USD by year"
+    ),
+    x = NULL,
+    y = NULL,
+    color = "Change in recognition:",
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = ~ paste0("$", .x / 1e06, " mil")
+  )
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 8
+dt |>
+  filter_rdr("china") |>
+  # group_by(ccode) |>
+  # mutate(
+  #   flip = (mean(tw) > 0 & mean(tw) < 1)+0
+  # ) |>
+  # filter(flip == 1) |>
+  filter(
+    cw_name %in% c(
+      "El Salvador",
+      "Dominican Republic",
+      "Nicaragua"
+    ),
+    year >= 2015
+  ) |>
+  ggplot() +
+  aes(year, oof_amt) +
+  geom_line(
+    linewidth = 1
+  ) +
+  geom_point(
+    aes(color = ifelse(tw == 1, "Before", "After") |>
+          factor(levels = c("Before", "After"))),
+    size = 2
+  ) +
+  geom_vline(
+    aes(xintercept = twyear),
+    lty = 2,
+    color = "firebrick"
+  ) +
+  facet_wrap(~ cw_name, scales = "free_y") +
+  ggpal("binary") +
+  theme(
+    panel.grid.major.x = element_blank()
+  ) +
+  labs(
+    title = str_wrap(
+      "Access to Chinese loans doesn't seem to be based on recognition of Taiwan",
+      width = 53
+    ),
+    subtitle = str_wrap(
+      "Shown: Chinese OOF (loans/debt) commitments in millions of 2021 USD by year",
+      width = 65
+    ),
+    x = NULL,
+    y = NULL,
+    color = "Change in recognition:",
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = ~ paste0("$", .x / 1e06, " mil")
+  )
+```
