@@ -1,0 +1,447 @@
+---
+title: "Nobel Prizes"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange", "navy"),
+  sequential = c("white", "steelblue"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 6) {
+  ggsave(
+    here(
+      "070_nobel_prize",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+## extract from the Wikipedia page
+library(rvest)
+
+wiki_page <- "https://en.wikipedia.org/wiki/List_of_Nobel_laureates_by_country" |>
+  read_html()
+
+wiki_tbl <- html_node(wiki_page, ".wikitable")
+
+wiki_df <- html_table(wiki_tbl, fill = T)
+
+## clean it up
+
+colnames(wiki_df) <- c("country", "laureates")
+
+wiki_df |>
+  mutate(
+    ccode = countrycode::countrycode(
+      country,
+      "country.name",
+      "cown"
+    ),
+    laureates = laureates |>
+      str_remove_all("\\s*\\([^)]*\\)\\s*") |>
+      str_remove_all("\\s*\\[[^\\]]*\\]\\s*") |>
+      str_remove_all("\\s+"),
+    laureates = ifelse(
+      country == "Taiwan", "1",
+      laureates
+    ) |> as.numeric()
+  ) -> wiki_df
+
+## combine with other data
+
+library(peacesciencer)
+library(globalmacrodata)
+
+gm <- gmd(
+  variables = c("rGDP_USD", "pop"),
+  version = "2025_09"
+) |>
+  filter(year == 2024)
+
+gm |>
+  transmute(
+    ccode = countrycode::countrycode(
+      ISO3, "iso3c", "cown"
+    ),
+    gdp = rGDP_USD,
+    pop
+  ) -> gm
+
+fs <- create_dyadyears() |>
+  add_fpsim(keep = "kappavv") |>
+  drop_na() |>
+  filter(ccode2 == 385)
+
+fs |>
+  mutate(
+    wt = year - min(year) + 1
+  ) |>
+  group_by(ccode1) |>
+  summarize(
+    lib_ord = sum(wt * kappavv) / sum(wt),
+    .groups = "drop"
+  ) |>
+  rename(
+    ccode = ccode1
+  ) -> fs
+
+## merge
+fs |>
+  left_join(gm) |>
+  left_join(wiki_df) -> dt
+
+## some final cleaning
+dt |>
+  mutate(
+    laureates = replace_na(
+      laureates, 0
+    ),
+    country = countrycode::countrycode(
+      ccode, "cown", "cowc"
+    )
+  ) -> dt
+```
+
+## Figures
+
+First a figure of the top laureates.
+
+```{r}
+#| fig-height: 6
+#| fig-width: 6
+
+dt |>
+  slice_max(laureates, n = 10) |>
+  arrange(-laureates) |>
+  ggplot() +
+  aes(
+    x = laureates,
+    y = reorder(country, -laureates)
+  ) +
+  geom_col(
+    fill = "navy"
+  ) +
+  geom_text(
+    aes(
+      label = paste0(
+        country, " (", laureates, ")"
+      )
+    ),
+    hjust = c(
+      1.1,
+      rep(-0.1, len = 9)
+    ),
+    family = "mono",
+    fontface = "bold",
+    color = c(
+      "orange",
+      rep("navy", len = 9)
+    )
+  ) +
+  labs(
+    title = str_wrap(
+      "The US dominates the field in Nobel prize laureates",
+      width = 37
+    ),
+    subtitle = "No. of laureates from 1901-2024",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = NULL
+  ) +
+  scale_y_discrete(
+    breaks = NULL
+  )
+saveit(1, 6, 6)
+```
+
+Then one showing laureates by pop.
+
+```{r}
+#| fig-height: 6
+#| fig-width: 6
+
+my_rank <- function(x) x |>
+  as.factor() |>
+  as.numeric()
+
+dt |>
+  mutate(
+    pop_rk = my_rank(pop),
+    lau_rk = my_rank(laureates)
+  ) |>
+  ggplot() +
+  aes(
+    x = pop_rk,
+    y = lau_rk
+  ) +
+  geom_point() +
+  geom_smooth(
+    method = "lm",
+    formula = y ~ poly(x, 2),
+    se = F,
+    color = "navy"
+  ) +
+  geom_point(
+    data = . %>%
+      filter(
+        country %in% c("IND", "CHN", "USA")
+      ),
+    color = "orange",
+    size = 2
+  ) +
+  geom_text_repel(
+    data = . %>%
+      filter(
+        country %in% c("IND", "CHN", "USA")
+      ),
+    aes(label = country),
+    color = "navy",
+    family = "mono",
+    fontface = "bold",
+    nudge_x = -15,
+    nudge_y = 1
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, 25, by = 5)
+  ) +
+  labs(
+    title = str_wrap(
+      "Winning more prizes is partly a matter of having more people (but there are no guarantees)",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Ranked-order laureates by ranked-order population size",
+      width = 55
+    ),
+    x = "Population\n(ranked from low to high)\n",
+    y = "Laureates\n(ranked from low to high)\n",
+    caption = logo
+  ) 
+saveit(2, 6, 6)
+```
+
+
+...by GDP/capita.
+
+```{r}
+#| fig-height: 6
+#| fig-width: 6
+
+dt |>
+  mutate(
+    gdp_rk = my_rank(gdp/pop),
+    lau_rk = my_rank(laureates)
+  ) |> 
+  ggplot() +
+  aes(
+    x = gdp_rk,
+    y = lau_rk
+  ) +
+  geom_point() +
+  geom_smooth(
+    method = "lm",
+    formula = y ~ poly(x, 2),
+    se = F,
+    color = "navy"
+  ) +
+  geom_point(
+    data = . %>%
+      filter(
+        country %in% c("LUX", "SWZ", "USA")
+      ),
+    color = "orange",
+    size = 2
+  ) +
+  geom_text_repel(
+    data = . %>%
+      filter(
+        country %in% c("LUX", "SWZ", "USA")
+      ),
+    aes(label = country),
+    color = "navy",
+    family = "mono",
+    fontface = "bold",
+    nudge_x = -15,
+    nudge_y = 2
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, 25, by = 5)
+  ) +
+  labs(
+    title = str_wrap(
+      "Winning more prizes is partly a matter of greater income (but still no guarantees)",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Ranked-order laureates by ranked-order GDP per capita",
+      width = 55
+    ),
+    x = "GDP per capita\n(ranked from low to high)\n",
+    y = "Laureates\n(ranked from low to high)\n",
+    caption = logo
+  ) 
+saveit(3, 6, 6)
+```
+
+
+...by alignment with Sweden.
+
+
+```{r}
+#| fig-height: 6
+#| fig-width: 6
+
+dt |>
+  mutate(
+    ord_rk = my_rank(lib_ord),
+    lau_rk = my_rank(laureates)
+  ) |> 
+  ggplot() +
+  aes(
+    x = ord_rk,
+    y = lau_rk
+  ) +
+  geom_point() +
+  geom_smooth(
+    method = "lm",
+    formula = y ~ poly(x, 2),
+    se = F,
+    color = "navy"
+  ) +
+  geom_point(
+    data = . %>%
+      filter(
+        country %in% c("DEN", "GMY", "USA")
+      ),
+    color = "orange",
+    size = 2
+  ) +
+  geom_text_repel(
+    data = . %>%
+      filter(
+        country %in% c("DEN", "GMY", "USA")
+      ),
+    aes(label = country),
+    color = "navy",
+    family = "mono",
+    fontface = "bold",
+    nudge_x = -15,
+    nudge_y = 2
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, 25, by = 5)
+  ) +
+  labs(
+    title = str_wrap(
+      "Winning more prizes is partly a matter of alignment with Sweden (but again, no guarantees)",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Ranked-order laureates by ranked-order UN voting alignment with Sweden",
+      width = 55
+    ),
+    x = "Alignment with Sweden\n(ranked from low to high)\n",
+    y = "Laureates\n(ranked from low to high)\n",
+    caption = logo
+  ) 
+saveit(4, 6, 6)
+```
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+dt |>
+  mutate(
+    lau_rk = my_rank(laureates),
+    gdp_rk = my_rank(gdp/pop),
+    pop_rk = my_rank(pop),
+    ord_rk = my_rank(lib_ord)
+  ) |>
+  lm(
+    log(lau_rk) ~ log(gdp_rk) + log(pop_rk) + 
+      log(ord_rk),
+    data = _
+  ) |>
+  broom::tidy() |>
+  filter(term != "(Intercept)") |>
+  mutate(
+    term = c(
+      "GDP per capita",
+      "Population",
+      "Alignemnt"
+    ),
+    lo = estimate - 1.96 * std.error,
+    hi = estimate + 1.96 * std.error
+  ) |>
+  ggplot() +
+  aes(
+    x = estimate,
+    xmin = lo,
+    xmax = hi,
+    y = term
+  ) +
+  geom_pointrange() +
+  geom_vline(
+    xintercept = 0,
+    lty = 2
+  ) +
+  labs(
+    title = str_wrap(
+      "Large and high income countries aligned with Sweden produce more Nobel prize laureates",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Estimates from a log-rank model with 95% confidence intervals",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    labels = ~ scales::percent(.x/100),
+    breaks = seq(0, 1, by = .1)
+  ) +
+  geom_text(
+    x = .3,
+    y = 3.3,
+    label = expression(
+      "(%"*Delta*" in laureate rank per %"*Delta*" in predictor rank)"
+    ),
+    family = "mono",
+    fontface = "bold",
+    size = 3.5
+  )
+saveit(5, 4, 6)
+```
+

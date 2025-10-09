@@ -232,6 +232,7 @@ dt |>
   scale_y_continuous(
     labels = ~ paste0("$", .x / 1e06, " mil")
   )
+saveit(3, 5, 8.5)
 ```
 
 
@@ -291,3 +292,60 @@ dt |>
     labels = ~ paste0("$", .x / 1e06, " mil")
   )
 ```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+dt |>
+  group_by(year, tw) |>
+  summarize(
+    across(ends_with("_amt"), ~ mean(.x, na.rm = T))
+  ) |>
+  ungroup() |>
+  mutate(
+    tw = ifelse(tw == 1, "Yes", "No")
+  ) |>
+  pivot_longer(
+    3:5
+  ) |>
+  mutate(
+    name = rep(
+      c("OOF", "ODA", "VOF"),
+      len = n()
+    )
+  ) |>
+  ggplot() +
+  aes(
+    x = year,
+    y = value
+  ) +
+  geom_line(
+    aes(color = tw),
+    linewidth = 1
+  ) +
+  facet_wrap(~ name) +
+  labs(
+    title = str_wrap(
+      "The best way to access Chinese development finance is ending Taiwanese recognition",
+      width = 40
+    ),
+    subtitle = "Average financing in billions of 2021 USD",
+    x = NULL,
+    y = NULL,
+    color = "Recognize Taiwan?",
+    caption = logo
+  ) +
+  ggpal("binary") +
+  scale_y_continuous(
+    labels = ~ scales::dollar(.x / 1e09)
+  ) +
+  theme(
+    axis.text.x = element_text(
+      hjust = 1, angle = 45
+    )
+  )
+saveit(4, 5, 6.5)
+```
+
