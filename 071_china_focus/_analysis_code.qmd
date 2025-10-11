@@ -1,0 +1,240 @@
+---
+title: "China Focus"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange", "navy"),
+  sequential = c("white", "steelblue"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 6) {
+  ggsave(
+    here(
+      "071_china_focus",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(gtrendsR)
+library(peacesciencer)
+library(odadata)
+
+create_stateyears(
+  system = "cow",
+  subset_years = 2004:2021
+) -> dt
+
+dt |>
+  add_gcdf() |>
+  filter_rdr(by = "china") -> dt
+
+tibble(
+  ccode = unique(dt$ccode),
+  iso2c = countrycode::countrycode(
+    ccode, "cown", "iso2c"
+  )
+) |> # drop north korea
+  filter(!(ccode %in% c(731, 970))) -> geos
+
+trends <- list()
+for(i in 1:nrow(geos)) {
+  cat("\n  Working on", geos$iso2c[i])
+  trends[[i]] <- gtrends(
+    keyword = "china",
+    geo = geos$iso2c[i],
+    time = "2004-01-01 2021-12-31",
+    low_search_volume = T,
+    onlyInterest = T
+  )
+  if(i %in% seq(10, nrow(geos), by = 10)) {
+    cat("\n...RESTING...")
+    Sys.sleep(30)
+  }
+}
+
+cleaned_trends <- list()
+for(i in 1:length(trends)) {
+  cleaned_trends[[i]] <- trends[[i]]$interest_over_time |>
+    mutate(
+      year = round_date(date, "year") |>
+        format("%Y") |> as.numeric(),
+      hits = as.numeric(hits) |>
+        replace_na(0)
+    ) |>
+    group_by(year, geo) |>
+    summarize(
+      hits = mean(hits),
+      .groups = "drop"
+    )
+    
+}
+
+cleaned_trends |>
+  reduce(bind_rows) -> cleaned_trends
+
+## final merge
+
+dt |>
+  left_join(
+    cleaned_trends |>
+      mutate(
+        ccode = countrycode::countrycode(
+          geo, "iso2c", "cown"
+        )
+      )
+  ) -> dt
+
+dt |>
+  mutate(
+    oda = ifelse(oda_amt > 0, 1, 0),
+    oof = ifelse(oof_amt > 0, 1, 0),
+    both = ifelse(
+      (oda * oof) > 0,
+      1, 0
+    )
+  ) |>
+  group_by(ccode) |>
+  mutate(
+    hits_sd = (hits - mean(hits)) / sd(hits)
+  ) |>
+  ungroup() -> dt
+```
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+dt |>
+  pivot_longer(
+    c(oda, oof)
+  ) |>
+  group_by(name, value) |>
+  mean_ci(hits) |>
+  ggplot() +
+  aes(
+    x = value,
+    y = mean,
+    ymin = lower,
+    ymax = upper
+  ) +
+  facet_wrap(
+    ~ name |> str_to_upper()
+  ) +
+  geom_col(
+    fill = "skyblue"
+  ) +
+  geom_col(
+    data = . %>%
+      filter(name == "oof"),
+    fill = "orange"
+  ) +
+  geom_errorbar(width = .25) +
+  geom_text(
+    aes(
+      y = 0,
+      label = round(mean, 1)
+    ),
+    vjust = -1.2,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  scale_x_continuous(
+    limits = c(-1, 2),
+    breaks = 0:1,
+    labels = c("No", "Yes")
+  ) +
+  labs(
+    title = paste0(
+      "<p>Only Chinese loans <i><span style='color: orange;'>(OOF)</span></i> predict</p>",
+      "<p>more Google search hits for China in</p>",
+      "<p>recipient countries</p>"
+    ),
+    subtitle = str_wrap(
+      "Mean hits in recipients and non-recipients by flow type with 83.4% confidence intervals",
+      width = 55
+    ),
+    x = "Recipient?",
+    y = "Mean Hits",
+    caption = logo
+  ) +
+  theme(
+    panel.grid.major.x = element_blank(),
+    plot.title = ggtext::element_markdown()
+  ) 
+saveit(1)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+library(estimatr)
+
+lm_robust(
+  hits ~ oof + oda + poly(year, 3),
+  fixed_effects = ~ ccode,
+  data = dt,
+  se_type = "stata",
+  clusters = ccode
+) |>
+  tidy() |>
+  filter(term %in% c("oof", "oda")) |>
+  mutate(term = c("OOF", "ODA")) |>
+  ggplot() +
+  aes(
+    x = estimate,
+    xmin = conf.low,
+    xmax = conf.high,
+    y = term
+  ) +
+  geom_pointrange(
+    color = "steelblue"
+  ) +
+  geom_vline(
+    xintercept = 0,
+    lty = 2
+  ) +
+  labs(
+    title = str_wrap(
+      "With a sensible research design, ODA (not OOF) predicts an increase in Google search hits for China",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "OLS estimates with cluster-robust standard errors from a country fixed effect model with a cubic time trend",
+      width = 55
+    ),
+    x = expression("Predicted "*Delta*" to hits"),
+    y = NULL,
+    caption = logo
+  )
+saveit(2)
+```
+
