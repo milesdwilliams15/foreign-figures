@@ -232,14 +232,14 @@ add_ucdp_acd_new <- function(
 }
 
 # test it out 
-library(peacesciencer)
-library(tidyverse)
+# library(peacesciencer)
+# library(tidyverse)
 
-create_stateyears(system = "gw", subset_years = 1946:2024) |>
-  add_ucdp_acd_new() -> sy
+# create_stateyears(system = "gw", subset_years = 1946:2024) |>
+#  add_ucdp_acd_new() -> sy
 
-create_dyadyears(system = "gw", subset_years = 1946:2024) |>
-  add_ucdp_acd_new() -> dy
+# create_dyadyears(system = "gw", subset_years = 1946:2024) |>
+#   add_ucdp_acd_new() -> dy
 
 ## add_gml_mic ----
 
@@ -387,8 +387,8 @@ add_gml_mic <- function(
 }
 
 
-create_dyadyears() |>
-  add_gml_mic() -> dy
+# create_dyadyears() |>
+#   add_gml_mic() -> dy
 
-create_stateyears() |>
-  add_gml_mic() -> sy
+# create_stateyears() |>
+#   add_gml_mic() -> sy
