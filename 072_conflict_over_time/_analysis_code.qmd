@@ -301,9 +301,22 @@ dt |>
   stat_smooth(
     aes(y = acd / prdyads, color = "ACD")
   ) +
+  geom_text_repel(
+    data = . %>%
+      filter(year == 2020),
+    aes(y = acd / prdyads),
+    label = str_wrap(
+      "The negative trend reversed from 2014-2024",
+      width = 15
+    ),
+    nudge_x = 0,
+    nudge_y = .01,
+    family = "mono",
+    fontface = "bold.italic"
+  ) +
   labs(
     title = str_wrap(
-      "If you extend the time-series with the Armed Conflict Dataset to 2024, the conflict rate decline reversed in the last decade",
+      "If you extend the time-series to 2024, it seems the decline in conflict is reversing course",
       width = 37
     ),
     subtitle = "Sources: Militarized Interstate Confrontations Dataset\n& the UCDP/PRIO Armed Conflict Dataset",
@@ -316,6 +329,6 @@ dt |>
     labels = scales::percent
   ) +
   ggpal("binary")
-saveit(5, 4, 6)
+saveit(5, 5.5, 6)
 ```
 
