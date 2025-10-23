@@ -38,4 +38,284 @@ saveit <- function(num = 1, ht = 5, wd = 6) {
 }
 ```
 
+## Data
+
+```{r}
+library(tidyverse)
+library(peacesciencer)
+```
+
+```{r}
+## no. of interstate conflicts from ACD
+ucdp_acd |>
+  filter(type_of_conflict == "interstate") |>
+  group_by(year) |>
+  summarize(
+    acd = n_distinct(conflict_id)
+  ) -> yearly_acd
+
+## no. of mics from MIC dataset
+read_csv(
+  here("_data", "mic-conf-1.0.csv")
+) -> mics
+tibble(
+  micnum = c(mics$micnum, mics$micnum),
+  year = c(mics$styear, mics$endyear),
+  fatalmin = c(mics$fatalmin, mics$fatalmin),
+  fatalmax = c(mics$fatalmax, mics$fatalmax)
+) |>
+  arrange(micnum) |>
+  distinct() |>
+  group_by(micnum) |>
+  complete(
+    year = full_seq(year, 1)
+  ) |>
+  mutate(
+    across(
+      everything(),
+      ~ max(.x, na.rm = T)
+    )
+  ) |>
+  group_by(year) |>
+  summarize(
+    mics = n_distinct(micnum),
+    mics25min = n_distinct(micnum[fatalmin >= 25], na.rm = T),
+    mics25max = n_distinct(micnum[fatalmax >= 25], na.rm = T)
+  ) |>
+  ungroup() -> yearly_mics
+
+tibble(
+  year = 1816:2014
+) |>
+  left_join(yearly_mics) |>
+  mutate(
+    across(
+      everything(),
+      ~ replace_na(.x, 0)
+    )
+  ) -> yearly_mics
+
+tibble(
+  year = 1946:2024
+) |>
+  left_join(
+    yearly_acd
+  ) |>
+  mutate(
+    acd = replace_na(acd, 0)
+  ) -> yearly_acd
+
+full_join(
+  yearly_mics,
+  yearly_acd
+) -> dt
+```
+
+
+```{r}
+
+create_dyadyears(
+  subset_years = 1816:2024,
+  directed = F
+) |>
+  add_contiguity() |>
+  add_cow_majors() -> dyadic_dt
+
+dyadic_dt |>
+  mutate(
+    prd = ifelse(
+      pmax(cowmaj1, cowmaj2) == 1 |
+        conttype > 0,
+      1, 0
+    )
+  ) |>
+  group_by(year) |>
+  summarize(
+    dyads = n(),
+    prdyads = sum(prd)
+  ) |>
+  mutate(
+    prdyads = replace_na(
+      prdyads, prdyads[year == 2016]
+    )
+  ) -> rel_dt
+
+left_join(
+  dt,
+  rel_dt
+) -> dt
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  drop_na(mics) |>
+  ggplot() +
+  aes(year, mics) +
+  geom_line(
+    color = "navy"
+  ) +
+  geom_smooth(
+    color = "orange"
+  ) +
+  labs(
+    title = str_wrap(
+      "The # of ongoing international conflicts per year steadily increased from 1816 to 2014",
+      width = 37
+    ),
+    subtitle = "Source: Militarized Interstate Confrontations Dataset",
+    x = NULL,
+    y = "# of MICs",
+    caption = logo
+  )
+saveit(1, 4, 6)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  drop_na(mics) |>
+  ggplot() +
+  aes(year, mics / prdyads) +
+  geom_line(
+    color = "navy"
+  ) +
+  geom_smooth(
+    color = "orange"
+  ) +
+  labs(
+    title = str_wrap(
+      "The conflict rate per relevant dyad remained mostly steady (even slightly increased) from 1816 to 2014",
+      width = 37
+    ),
+    subtitle = "Source: Militarized Interstate Confrontations Dataset",
+    x = NULL,
+    y = "MIC % Rate",
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  )
+saveit(2, 4, 6)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  drop_na(mics) |>
+  ggplot() +
+  aes(year, ymin = mics25max, ymax = mics25min) +
+  geom_ribbon(
+    color = "navy",
+    fill = "navy",
+    alpha = .4
+  ) +
+  geom_smooth(
+    aes(y = (mics25max + mics25min) / 2),
+    color = "orange"
+  ) +
+  labs(
+    title = str_wrap(
+      "Ongoing int'l conflicts ending with 25+ battle deaths increased from 1816 to 2014 (but not by much)",
+      width = 37
+    ),
+    subtitle = "Source: Militarized Interstate Confrontations Dataset",
+    x = NULL,
+    y = "# of MICs",
+    caption = logo
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, 9, by = 1)
+  )
+saveit(3, 5, 6)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  drop_na(mics) |>
+  ggplot() +
+  aes(year, ymin = mics25max / prdyads, 
+      ymax = mics25min / prdyads) +
+  geom_ribbon(
+    color = "navy",
+    fill = "navy",
+    alpha = .4
+  ) +
+  geom_smooth(
+    aes(y = ((mics25max + mics25min) / 2) / prdyads),
+    color = "orange"
+  ) +
+  labs(
+    title = str_wrap(
+      "The rate of conflicts with 25+ deaths decreased from 1816 to 2014",
+      width = 37
+    ),
+    subtitle = "Source: Militarized Interstate Confrontations Dataset",
+    x = NULL,
+    y = "MIC % Rate",
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  )
+saveit(4, 4, 6)
+```
+
+```{r}
+#| fig-height: 5.5
+#| fig-width: 6
+
+dt |>
+  #drop_na(acd) |>
+  ggplot() +
+  aes(year, ymin = mics25max / prdyads, 
+      ymax = mics25min / prdyads) +
+  geom_ribbon(
+    aes(
+      color = "MIC"
+    ),
+    alpha = .4
+  ) +
+   geom_line(
+    aes(y = acd / prdyads, color = "ACD")
+  ) +
+  stat_smooth(
+    aes(
+      y = ((mics25max + mics25min) / 2) / prdyads,
+      color = "MIC"
+    ),
+    method = "loess"
+  ) +
+  stat_smooth(
+    aes(y = acd / prdyads, color = "ACD")
+  ) +
+  labs(
+    title = str_wrap(
+      "If you extend the time-series with the Armed Conflict Dataset to 2024, the conflict rate decline reversed in the last decade",
+      width = 37
+    ),
+    subtitle = "Sources: Militarized Interstate Confrontations Dataset\n& the UCDP/PRIO Armed Conflict Dataset",
+    x = NULL,
+    y = "% Rate",
+    caption = logo,
+    color = "Dataset:"
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  ) +
+  ggpal("binary")
+saveit(5, 4, 6)
+```
 
