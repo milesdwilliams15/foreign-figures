@@ -105,6 +105,7 @@ tibble(
     acd = replace_na(acd, 0)
   ) -> yearly_acd
 
+## merge together
 full_join(
   yearly_mics,
   yearly_acd
@@ -113,7 +114,7 @@ full_join(
 
 
 ```{r}
-
+## now get a measure of political relevance
 create_dyadyears(
   subset_years = 1816:2024,
   directed = F
@@ -140,10 +141,52 @@ dyadic_dt |>
     )
   ) -> rel_dt
 
+## merge it in
 left_join(
   dt,
   rel_dt
 ) -> dt
+```
+
+```{r}
+## now I need a measure of dyads in disputes
+source(
+  here("_helpers", "peacesciencer_extras.R")
+)
+create_dyadyears(
+  subset_years = 1816:2014,
+  directed = F
+) |>
+  add_gml_mic(fat = 25, fatmax = F) |>
+  group_by(year) |>
+  summarize(
+    dyadic_mics25 = sum(gml_mic_ongoing)
+  ) -> yearly_dyad_mics25
+
+create_dyadyears(
+  subset_years = 1816:2014,
+  directed = F
+) |>
+  add_gml_mic() |>
+  group_by(year) |>
+  summarize(
+    dyadic_mics0 = sum(gml_mic_ongoing)
+  ) -> yearly_dyad_mics0
+
+create_dyadyears(
+  subset_years = 1946:2024,
+  directed = F,
+  system = "gw"
+) |>
+  add_ucdp_acd_new(type = "interstate") |>
+  group_by(year) |>
+  summarize(
+    dyadic_acds = sum(ucdp_ongoing)
+  ) -> yearly_dyad_acds
+
+## merge in
+list(dt, yearly_dyad_mics0, yearly_dyad_mics25, yearly_dyad_acds) |>
+  reduce(left_join) -> dt
 ```
 
 
@@ -160,8 +203,10 @@ dt |>
   geom_line(
     color = "navy"
   ) +
-  geom_smooth(
-    color = "orange"
+  stat_smooth(
+    color = "orange",
+    method = "gam",
+    method.args = list(family = quasipoisson)
   ) +
   labs(
     title = str_wrap(
@@ -187,12 +232,14 @@ dt |>
   geom_line(
     color = "navy"
   ) +
-  geom_smooth(
-    color = "orange"
+  stat_smooth(
+    color = "orange",
+    method = "gam",
+    method.args = list(family = quasibinomial)
   ) +
   labs(
     title = str_wrap(
-      "The conflict rate per relevant dyad remained mostly steady (even slightly increased) from 1816 to 2014",
+      "The conflict rate per relevant dyad increased (but only slightly) from 1816 to 2014",
       width = 37
     ),
     subtitle = "Source: Militarized Interstate Confrontations Dataset",
@@ -213,30 +260,29 @@ saveit(2, 4, 6)
 dt |>
   drop_na(mics) |>
   ggplot() +
-  aes(year, ymin = mics25max, ymax = mics25min) +
-  geom_ribbon(
-    color = "navy",
-    fill = "navy",
-    alpha = .4
+  aes(year, dyadic_mics0 / prdyads) +
+  geom_line(
+    color = "navy"
   ) +
-  geom_smooth(
-    aes(y = (mics25max + mics25min) / 2),
-    color = "orange"
+  stat_smooth(
+    color = "orange",
+    method = "gam",
+    method.args = list(quasibinomial)
   ) +
   labs(
     title = str_wrap(
-      "Ongoing int'l conflicts ending with 25+ battle deaths increased from 1816 to 2014 (but not by much)",
+      "The dyadic conflict rate per relevant dyad shows more movement from 1816 to 2014",
       width = 37
     ),
     subtitle = "Source: Militarized Interstate Confrontations Dataset",
     x = NULL,
-    y = "# of MICs",
+    y = "MIC % Rate",
     caption = logo
   ) +
   scale_y_continuous(
-    breaks = seq(0, 9, by = 1)
+    labels = scales::percent
   )
-saveit(3, 5, 6)
+saveit(3, 4, 6)
 ```
 
 ```{r}
@@ -246,20 +292,18 @@ saveit(3, 5, 6)
 dt |>
   drop_na(mics) |>
   ggplot() +
-  aes(year, ymin = mics25max / prdyads, 
-      ymax = mics25min / prdyads) +
-  geom_ribbon(
-    color = "navy",
-    fill = "navy",
-    alpha = .4
+  aes(year, dyadic_mics25 / prdyads) +
+  geom_line(
+    color = "navy"
   ) +
-  geom_smooth(
-    aes(y = ((mics25max + mics25min) / 2) / prdyads),
-    color = "orange"
+  stat_smooth(
+    color = "orange",
+    method = "gam",
+    method.args = list(family = quasibinomial)
   ) +
   labs(
     title = str_wrap(
-      "The rate of conflicts with 25+ deaths decreased from 1816 to 2014",
+      "A post WWII decline is more obvious when using a 25+ battle death threshold",
       width = 37
     ),
     subtitle = "Source: Militarized Interstate Confrontations Dataset",
@@ -279,44 +323,49 @@ saveit(4, 4, 6)
 
 dt |>
   #drop_na(acd) |>
+  filter(year > 1945) |>
   ggplot() +
-  aes(year, ymin = mics25max / prdyads, 
-      ymax = mics25min / prdyads) +
-  geom_ribbon(
+  aes(year) +
+  geom_line(
     aes(
+      y = dyadic_mics25 / prdyads,
       color = "MIC"
-    ),
-    alpha = .4
+    )
   ) +
    geom_line(
-    aes(y = acd / prdyads, color = "ACD")
+    aes(y = dyadic_acds / prdyads, color = "ACD")
   ) +
   stat_smooth(
     aes(
-      y = ((mics25max + mics25min) / 2) / prdyads,
+      y = dyadic_mics25 / prdyads,
       color = "MIC"
     ),
-    method = "loess"
+    method = "gam",
+    method.args = list(family = quasibinomial),
+    se = F
   ) +
   stat_smooth(
-    aes(y = acd / prdyads, color = "ACD")
+    aes(y = dyadic_acds / prdyads, color = "ACD"),
+    method = "gam",
+    method.args = list(family = quasibinomial),
+    se = F
   ) +
   geom_text_repel(
     data = . %>%
       filter(year == 2020),
     aes(y = acd / prdyads),
     label = str_wrap(
-      "The negative trend reversed from 2014-2024",
+      "The trend moves upward just a bit from 2014-2024",
       width = 15
     ),
     nudge_x = 0,
-    nudge_y = .01,
+    nudge_y = .05,
     family = "mono",
     fontface = "bold.italic"
   ) +
   labs(
     title = str_wrap(
-      "If you extend the time-series to 2024, it seems the decline in conflict is reversing course",
+      "Little evidence of a resurgence in conflict when extending the data to 2024",
       width = 37
     ),
     subtitle = "Sources: Militarized Interstate Confrontations Dataset\n& the UCDP/PRIO Armed Conflict Dataset",
