@@ -1,0 +1,231 @@
+---
+title: "Risk of escalation"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange3"
+  ),
+  binary = c("orange", "navy"),
+  sequential = c("white", "steelblue"),
+  diverging = c("red3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 6) {
+  ggsave(
+    here(
+      "073_escalation",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+read_csv(
+  here("_data", "mie-1.0.csv")
+) -> dt
+```
+
+
+## Figures
+
+I want to find out:
+
+1. What share of confrontations begin with use of force?
+
+2. What share of confrontations ever see use of force?
+
+3. Ditto for fatalities?
+
+4. Are confrontations that begin with use of force or fatalities more likely to escalate to higher overall fatalities, more total militarized events, and war?
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+dt |>
+  group_by(micnum) |>
+  summarize(
+    "Begin with force" = mean(
+      hostlev[eventnum == 1] >= 4
+    ),
+    "Witness any force" = mean(
+      max(hostlev) >= 4
+    ),
+    "Begin with fatalities" = mean(
+      fatalmax1[eventnum == 1] > 0 |
+        fatalmax2[eventnum == 1] > 0
+    ),
+    "Witness any fatalities" = mean(
+      max(pmax(fatalmax1, fatalmax2)) > 0
+    )
+  ) |>
+  ungroup() |>
+  summarize(
+    across(2:5, mean)
+  ) |>
+  pivot_longer(
+    everything()
+  ) |>
+  mutate(ord = 1:4) |>
+  ggplot() +
+  aes(value, reorder(name, -ord)) +
+  geom_col(fill = "navy") +
+  geom_text(
+    aes(label = percent(value, .1)),
+    family = "mono",
+    fontface = "bold.italic",
+    color = "orange",
+    hjust = 1.1
+  ) +
+  scale_x_continuous(
+    breaks = NULL
+  ) +
+  labs(
+    title = str_wrap(
+      "1 in 3 conflicts start with force but only 1 in 14 start with fatalities",
+      width = 37
+    ),
+    subtitle = "Source: MIE dataset, 1816-2014\n\nThe % of conflicts that...",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    panel.grid.major = element_blank()
+  )
+saveit(1, 4, 6)
+``` 
+
+
+```{r}
+dt |>
+  group_by(micnum) |>
+  summarize(
+    deaths = ifelse(
+      pmax(fatalmax1, fatalmax2)[eventnum==1] > 0,
+      "Starts with fatalities",
+      "Doesn't start with fatalities"
+    ),
+    events = n(),
+    fatalmin = sum(fatalmin1 + fatalmin2),
+    fatalmax = sum(fatalmax1 + fatalmax2),
+    warlev = ifelse(
+      max(hostlev) == 5,
+      1, 0
+    ),
+    war = ifelse(
+      fatalmax >= 1000,
+      1, 0
+    )
+  ) -> smry
+```
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+source(here("_helpers", "my_mean_ci.R"))
+
+ggplot(smry) +
+  aes(events, deaths) +
+  stat_summary(
+    fun.data = ~ my_mean_ci(.x, ci = .834),
+    color = "navy"
+  ) +
+  geom_vline(
+    xintercept = 0,
+    alpha = 0
+  ) +
+  scale_x_continuous(
+    breaks = seq(0, 100, by = 5)
+  ) +
+  labs(
+    title = "Conflicts that start out deadly end after more total militarized events" |> str_wrap(37),
+    subtitle = "\nSource: MIE dataset, 1816-2014",
+    x = "Mean events with 83.4% bootstrapped confidence intervals" |>
+      str_wrap(25),
+    y = NULL,
+    caption = logo
+  )
+saveit(2, 4, 6)
+```
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(smry) +
+  aes(fatalmax, deaths) +
+  stat_summary(
+    fun.data = ~ my_mean_ci(.x, ci = .834),
+    color = "navy"
+  ) +
+  geom_vline(
+    xintercept = 0,
+    alpha = 0
+  ) +
+  scale_x_continuous(
+    labels = comma
+  ) +
+  labs(
+    title = "Conflicts that start out deadly end with no more or less fatalities" |> str_wrap(37),
+    subtitle = "\nSource: MIE dataset, 1816-2014",
+    x = "Mean upper bound of deaths with 83.4% bootstrapped confidence intervals" |>
+      str_wrap(35),
+    y = NULL,
+    caption = logo
+  )
+saveit(3, 4, 6)
+```
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(smry) +
+  aes(war, deaths) +
+  stat_summary(
+    fun.data = ~ my_mean_ci(.x, ci = .834),
+    color = "navy"
+  ) +
+  geom_vline(
+    xintercept = 0,
+    alpha = 0
+  ) +
+  scale_x_continuous(
+    labels = percent
+  ) +
+  labs(
+    title = "Conflicts that start out deadly are 3x more likely to escalate to war" |> str_wrap(37),
+    subtitle = "\nSource: MIE dataset, 1816-2014",
+    x = "Percent wars with 83.4% bootstrapped confidence intervals" |>
+      str_wrap(25),
+    y = NULL,
+    caption = logo
+  )
+saveit(4, 4, 6)
+```
