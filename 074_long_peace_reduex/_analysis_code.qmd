@@ -1,0 +1,229 @@
+---
+title: "The Long Peace"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "gray80",
+    "navy",
+    "steelblue"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "074_long_peace_reduex",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+## probabilities over time
+
+years <- 1:250
+# range of years
+
+wars <- 0:3
+# number of wars
+
+prob <- 0.02
+# probability of 2 systemic wars per century
+
+dt <- expand_grid(
+  years,
+  wars
+) |>
+  mutate(
+    prob = dbinom(
+      x = wars,
+      size = years,
+      prob = prob
+    )
+  )
+```
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+ggplot(dt) +
+  aes(
+    x = years,
+    y = prob,
+    color = as.factor(wars)
+  ) +
+  geom_line(
+    linewidth = 1
+  ) +
+  ggpal() +
+  labs(
+    title = str_wrap(
+      "The long peace could be a fluke",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "% chance of 0-3 systemic wars per year after WW2",
+      width = 55
+    ),
+    caption = logo,
+    x = "Years since WW2",
+    y = NULL,
+    color = "No. of wars"
+  ) +
+  my_theme() +
+  scale_y_continuous(
+    labels = scales::percent
+  ) +
+  geom_textvline(
+    xintercept = 80,
+    label = "80 years",
+    hjust = .8,
+    color = "navy",
+    family = "mono",
+    fontface = "bold"
+  )
+saveit(1, 5, 6)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+dt |>
+  filter(years == 80) |>
+  ggplot() +
+  aes(
+    y = prob,
+    x = ifelse(
+      wars == 1,
+      paste0(wars, " war"),
+      paste0(wars, " wars")
+    )
+  ) +
+  geom_col(
+    fill = "navy",
+    width = .5
+  ) +
+  geom_text(
+    aes(
+      label = paste0(
+        round(prob * 100), 
+        "%"
+      )
+    ),
+    vjust = 1.5,
+    color = "orange3",
+    family = "mono",
+    fontface = "bold"
+  )+
+  my_theme() +
+  labs(
+    title = str_wrap(
+      "A 1 in 5 chance of 80 years of peace",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "% chance of 0-3 systemic wars after 80 years assuming a constant rate of 2 per century",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_y_continuous(
+    breaks = NULL
+  ) +
+  theme(
+    panel.grid.major = element_blank()
+  )
+saveit(2, 5, 6)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+p <- 0
+for(i in 1:nrow(dt)) {
+  foo <- binom.test(
+    x = 0,
+    n = dt$years[i],
+    p = 0.02,
+    alternative = "less"
+  )
+  p[i] <- foo$p.value
+}
+
+dt |>
+  mutate(
+    p = p
+  ) |>
+  ggplot() +
+  aes(years, p) +
+  geom_line(
+    color = "navy",
+    linewidth = 1
+  ) +
+  geom_textvline(
+    xintercept = 80,
+    label = "80 years\n(now)",
+    family = "mono",
+    fontface = "bold"
+  ) +
+  geom_textvline(
+    xintercept = 150,
+    label = "150 years\n(+70 from now)",
+    family = "mono",
+    fontface = "bold"
+  ) +
+  geom_texthline(
+    yintercept = .05,
+    label = "Statistical\nSignificance",
+    hjust = 0,
+    family = "mono",
+    fontface = "bold",
+    linetype = 2
+  ) +
+  my_theme() +
+  labs(
+    title = str_wrap(
+      "It would take another 70 years of peace to reject the claim that the chance of systemic war has declined",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "% chance of seeing this many years of peace if the yearly rate of systemic war hasn't changed",
+      width = 55
+    ),
+    x = "Years",
+    y = NULL,
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  )
+saveit(3, 5, 6)
+```
+
