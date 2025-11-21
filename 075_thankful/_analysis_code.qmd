@@ -1,0 +1,324 @@
+---
+title: "Peace Dealz"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+library(haven)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "gray80",
+    "navy",
+    "steelblue"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "075_thankful",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+readRDS(
+  here("_data", "WVS_Cross-National_Wave_7_rds_v6_0.rds")
+) -> dt
+```
+
+## Figures
+
+How satisfied are people with their lives?
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+dt |>
+  filter(Q49 > 0) |> 
+  ct(Q49) |>
+  ggplot() +
+  aes(Q49, pct) +
+  geom_col(fill = "navy") +
+  scale_x_continuous(
+    breaks = 1:10
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  ) +
+  labs(
+    title = str_wrap(
+      "Most people in the world are satisfied with their lives",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "WVS (wave 7): All things considered, how satisfied are you with your life as a whole these days?",
+      width = 55
+    ),
+    x = "Satisfaction (1-10 scale)",
+    y = "% Responses",
+    caption = logo
+  )
+saveit(1, 5, 6)
+```
+
+How does this break down by country?
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+dt |>
+  mutate(
+    country = C_COW_NUM |>
+      countrycode::countrycode("cown", "country.name")
+  ) -> dt
+
+dt |>
+  drop_na(country) |>
+  filter(Q49 > 0) |>
+  group_by(country) |>
+  mean_ci(Q49) -> smry
+
+smry |>
+  slice_max(mean, n = 10) |>
+  arrange(-mean) |>
+  mutate(
+    country = paste0(1:10, ". ", country)
+  ) |>
+  ggplot() +
+  aes(mean, reorder(country, mean), xmin = lower, xmax = upper) +
+  geom_pointrange(
+    color = "navy"
+  ) +
+  labs(
+    title = str_wrap(
+      "The wealtiest countries aren't in the top 10 for life satisfaction",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "WVS (wave 7): All things considered, how satisfied are you with your life as a whole these days?",
+      width = 55
+    ),
+    x = "Mean Response (1-10 scale)",
+    y = NULL,
+    caption = logo
+  )
+saveit(2, 5, 6)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+smry |>
+  slice_min(mean, n = 10) |>
+  arrange(-mean) |>
+  mutate(
+    country = paste0(51:60, ". ", country)
+  ) |>
+  ggplot() +
+  aes(mean, reorder(country, mean), xmin = lower, xmax = upper) +
+  geom_pointrange(
+    color = "navy"
+  ) +
+  labs(
+    title = str_wrap(
+      "Iraqis have the lowest life satisfaction among those surveyed",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "WVS (wave 7): All things considered, how satisfied are you with your life as a whole these days?",
+      width = 55
+    ),
+    x = "Mean Response (1-10 scale)",
+    y = NULL,
+    caption = logo
+  )
+saveit(3, 5, 6)
+```
+
+Where's the US? 26th on the list (7.22)
+
+```{r}
+smry |>
+  arrange(-mean)
+```
+
+Worse off relative to parents?
+
+```{r}
+dt |>
+  mutate(
+    improve = frcode(
+      Q56 == 2 ~ "Worse",
+      Q56 == 3 ~ "Same",
+      Q56 == 1 ~ "Better"
+    )
+  ) -> dt
+
+dt |>
+  ct(improve, show_na = F)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+dt |>
+  filter(Q49 > 0) |>
+  group_by(improve) |>
+  mean_ci(Q49) |>
+  drop_na() |>
+  ggplot() +
+  aes(improve, mean) +
+  geom_col(fill = "navy", width = .5) +
+  geom_text(
+    aes(label = round(mean, 1), y = 0),
+    family = "mono",
+    fontface = "bold",
+    color = "orange",
+    vjust = -1
+  ) +
+  labs(
+    title = str_wrap(
+      "People who think they're better off than their parents also have more life satisfaction",
+      width =37
+    ),
+    subtitle = str_wrap(
+      "WVS (wave 7): All things considered, how satisfied are you with your life as a whole these days?",
+      width = 55
+    ),
+    x = "\nStandard of living compared to parents?",
+    y = NULL,
+    caption = logo
+  )
+saveit(4, 5, 6)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+set.seed(3)
+dt |>
+  filter(Q49 > 0) |>
+  group_by(C_COW_ALPHA) |>
+  summarize(
+    better = mean(improve == "Better", na.rm = T),
+    satisfy = mean(Q49)
+  ) |>
+  ggplot() +
+  aes(better, satisfy, label = C_COW_ALPHA) +
+  geom_point(color = "navy") +
+  geom_smooth(
+    method = "lm",
+    se = F,
+    color = "orange"
+  ) +
+  scale_x_continuous(
+    labels = scales::percent
+  ) +
+  labs(
+    title = str_wrap(
+      "Countries with higher shares better off than parents have higher life satisfaction",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Country averages shown, based on WVS (wave 7)"
+    ),
+    x = "% better than parents",
+    y = "Mean satisfaction",
+    caption = logo
+  )
+saveit(5, 5, 6)
+```
+
+Does this correlate with GDP?
+
+```{r}
+library(globalmacrodata)
+
+gm <- gmd(version = "2025_09")
+gm |>
+  filter(year %in% 2016:2021) |>
+  mutate(
+    C_COW_NUM = countrycode::countrycode(
+      ISO3, "iso3c", "cown"
+    )
+  ) |>
+  group_by(C_COW_NUM) |>
+  mutate(
+    growth = (rGDP_pc - lag(rGDP_pc, order_by = year)) /
+      lag(rGDP_pc, order_by = year)
+  ) |>
+  transmute(C_COW_NUM, A_YEAR = year, growth) -> gm
+
+dt |>
+  left_join(
+    gm
+  ) -> ndt
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+ndt |>
+  group_by(C_COW_ALPHA) |>
+  summarize(
+    better = mean(improve == "Better", na.rm = T),
+    growth = unique(growth)
+  ) |>
+  ggplot() +
+  aes(growth, better) +
+  geom_point(color = "navy") +
+  geom_smooth(
+    method = "lm",
+    se = F,
+    color = "orange"
+  ) +
+  scale_x_continuous(
+    labels = scales::percent
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  ) +
+  labs(
+    title = str_wrap(
+      "Countries with higher GDP per capita growth have higher shares that feel better off than their parents",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Country averages shown, based on WVS (wave 7) and Global Macro Database (2025_09)",
+      width = 55
+    ),
+    y = "% better than parents",
+    x = "% GDP/capita growth",
+    caption = logo
+  )
+saveit(6, 5, 6)
+```
+
