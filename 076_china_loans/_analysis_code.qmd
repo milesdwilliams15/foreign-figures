@@ -1,0 +1,437 @@
+---
+title: "Chinese loans"
+format: html
+---
+
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+library(haven)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "gray80",
+    "navy",
+    "steelblue"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("gray", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "076_china_loans",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+readxl::read_xlsx(
+  here("_data", "AidDatas_CLG_Global_Dataset_v1.0.xlsx"),
+  sheet = 5
+) -> dt
+```
+
+Exploring:
+
+```{r}
+dt |>
+  mutate(
+    usa = ((Country_of_Activity_ISO3 == "USA")+0) |>
+      replace_na(0)
+  ) -> dt
+
+dt |>
+  filter(
+    Recommended_for_Aggregates == "Yes"
+  ) -> dt
+```
+
+
+```{r}
+dt |>
+  ct(Flow_Class)
+```
+
+```{r}
+dt |>
+  ct(usa) |>
+  mutate(
+    pct = scales::percent(pct)
+  )
+```
+
+```{r}
+dt |>
+  group_by(usa) |>
+  summarize(
+    total_financing = sum(Amount_Constant_USD_2023, na.rm = T) 
+  ) |>
+  ungroup() |>
+  mutate(
+    pct = (total_financing / sum(total_financing)) |> 
+      scales::percent(),
+    total_financing = total_financing |>
+      scales::dollar()
+  )
+dt$Adjusted_Amount_Constant_USD_2023 |> sum(na.rm = T) |>
+  scales::dollar()
+```
+
+```{r}
+dt |>
+  group_by(usa, Flow_Type) |>
+  summarize(
+    total_financing = sum(Amount_Constant_USD_2023, na.rm = T) 
+  ) |>
+  group_by(usa) |>
+  mutate(
+    pct = (total_financing / sum(total_financing)) |> 
+      scales::percent(),
+    total_financing = total_financing |>
+      scales::dollar()
+  )
+```
+
+```{r}
+dt |>
+  filter(usa == 1) |>
+  select(Commitment_Year, Narrative_Description) |> 
+  view()
+```
+
+```{r}
+dt |>
+  ct(OECD_Income_Status_Host_Country)
+```
+
+```{r}
+dt |>
+  group_by(usa) |>
+  ct(Intent) |>
+  mutate(
+    pct = scales::percent(pct)
+  )
+```
+
+
+## Figures
+
+```{r}
+dt |>
+  mutate(amt = Adjusted_Amount_Constant_USD_2023) |>
+  group_by(Country_of_Activity) |>
+  summarize(
+    sum = sum(amt, na.rm = T),
+    pct_commercial = sum(amt[Intent == "Commercial"], na.rm = T),
+    pct_development = sum(amt[Intent == "Development"], na.rm = T),
+    pct_representational = sum(amt[Intent == "Representational"], na.rm = T),
+    pct_mixed = sum(amt[Intent == "Mixed"], na.rm = T)
+  ) |>
+  slice_max(sum, n = 10) -> t10
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+ggplot(t10) +
+  aes(sum, reorder(Country_of_Activity, sum)) +
+  geom_col(fill = "navy") +
+  geom_text(
+    aes(label = scales::dollar(sum / 1e09)),
+    hjust = 1.1,
+    family = "mono",
+    fontface = "bold",
+    color = "orange"
+  ) +
+  scale_x_continuous(breaks = NULL) +
+  labs(
+    title = str_wrap(
+      "The U.S. is the biggest recipient of Chinese overseas finance",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Cummulative financing in billions of 2023 USD, 2000-2023, according to AidData's Global China Data (version 1.0)",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    panel.grid.major = element_blank()
+  )
+saveit(1, 5, 6)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+dt |>
+  group_by(Commitment_Year) |>
+  summarize(
+    total = sum(Amount_Constant_USD_2023, na.rm = T)
+  ) |>
+  ggplot() +
+  aes(Commitment_Year, total) +
+  geom_line(aes(color = "Yearly Sum")) +
+  stat_smooth(aes(color = "Smoothed Trend"), se = F, 
+              method = "gam", method.args = list(family = quasipoisson)) +
+  scale_y_continuous(
+    labels = ~ scales::dollar(.x / 1e09)
+  ) +
+  ggpal("binary") +
+  labs(
+    title = str_wrap(
+      "China spends 100s of billions of $ on overseas loans and grants on an annual basis",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Yearly totals in billions of 2023 USD (AidData: China's Global Loans and Grants Dataset, Version 1.0)",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = NULL
+  )
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+dt |>
+  distinct(Country_of_Activity_ISO3) |>
+  drop_na() |> 
+  count()
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+
+dt |>
+  group_by(Commitment_Year, OECD_Income_Status_Host_Country) |>
+  summarize(
+    total = sum(Amount_Constant_USD_2023, na.rm = T)
+  ) |>
+  drop_na() |>
+  mutate(
+    status = frcode(
+      str_detect(OECD_Income_Status_Host_Country, "High") ~ "High income",
+      OECD_Income_Status_Host_Country == "Upper middle income" ~ "Upper middle\nincome",
+      OECD_Income_Status_Host_Country == "Lower middle income" ~ "Lower middle\nincome",
+      OECD_Income_Status_Host_Country == "Low income" ~ "Low income"
+    )
+  ) |>
+  ggplot() +
+  aes(Commitment_Year, total) +
+  geom_line(aes(color = status),
+            linewidth = 1) +
+  scale_y_continuous(
+    labels = ~ scales::dollar(.x / 1e09)
+  ) +
+  ggpal(
+    type = "sequential",
+    ordinal = T,
+    levels = 4
+  ) +
+  labs(
+    title = str_wrap(
+      "China spends the most in high income countries",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "Yearly totals in billions of 2023 USD, 2000-2023, according to AidData's Global China Data (version 1.0)",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = NULL
+  ) +
+  guides(
+    color = guide_legend(nrow = 2)
+  )
+saveit(2, 5, 6)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 8
+t10 |>
+  pivot_longer(pct_commercial:pct_mixed) |>
+  mutate(
+    name = frcode(
+      name == "pct_mixed" ~ "Mixed",
+      name == "pct_representational" ~ "Representational",
+      name == "pct_development" ~ "Development",
+      name == "pct_commercial" ~ "Commercial"
+    )
+  ) |>
+  arrange(sum, desc(name)) |>
+  group_by(Country_of_Activity) |>
+  mutate(
+    value = value / sum,
+    cum_pct = cumsum(value)
+  ) |>
+  ggplot() +
+  aes(value, reorder(Country_of_Activity, sum), fill = name) +
+  geom_col() +
+  geom_text(
+    data = . %>% filter(value > .05),
+    aes(cum_pct - value/2, label = scales::percent(value, 1)),
+    color = "white",
+    family = "mono",
+    fontface = "bold"
+  ) +
+  geom_vline(
+    xintercept = 1.15,
+    linewidth = 30,
+    color = "gray"
+  ) +
+  geom_text(
+    aes(x = 1.15, label = scales::dollar(sum/1e09)),
+    family = "mono",
+    fontface = "bold"
+  ) +
+  ggpal(
+    aes = "fill",
+    guide = guide_legend(reverse = T)
+  ) +
+  scale_x_continuous(
+    breaks = c(.5, 1.15),
+    labels = c("\nIntent (%)", "Total in\nbillions $"),
+    limits = c(0, 1.2)
+  ) +
+  labs(
+    title = str_wrap(
+      "China's intends to promote mainly commercial and mixed interests in its top 10 finance recipients",
+      width = 53
+    ),
+    subtitle = str_wrap(
+      "Totals broken down by intent, 2000-2023, according to AidData's Global China Data (version 1.0)",
+      width = 75
+    ),
+    x = NULL,
+    y = NULL,
+    fill = NULL,
+    caption = logo
+  ) +
+  theme(
+    panel.grid.major = element_blank()
+  )
+saveit(3, 5, 8)
+```
+
+```{r}
+dt |>
+  group_by(Intent) |>
+  summarize(
+    sum = sum(Adjusted_Amount_Constant_USD_2023, na.rm = T),
+    .groups = "drop"
+  ) |>
+  mutate(
+    pct = sum / sum(sum)
+  )
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 8
+dt |>
+  mutate(
+    type = frcode(
+      Flow_Type == "Loan" ~ "Loan",
+      Flow_Type == "Grant" ~ "Grant",
+      TRUE ~ "Other"
+    ),
+    status = ifelse(
+      str_detect(OECD_Income_Status_Host_Country, "High"), 
+      "High income", OECD_Income_Status_Host_Country
+    )
+  ) |>
+  group_by(status, type) |>
+  summarize(
+    amt = sum(Adjusted_Amount_Constant_USD_2023, na.rm = T)
+  ) |>
+  drop_na() |>
+  arrange(amt, desc(type)) |>
+  group_by(status) |>
+  mutate(
+    tot = sum(amt),
+    pct = amt / tot,
+    cum_pct = cumsum(pct)
+  ) |>
+  ggplot() +
+  aes(pct, reorder(str_wrap(status, 15), amt), fill = type) +
+  geom_col() +
+  geom_text(
+    data = . %>% filter(pct > .05),
+    aes(cum_pct - pct/2, label = scales::percent(pct, 1)),
+    color = "white",
+    family = "mono",
+    fontface = "bold"
+  ) +
+  geom_vline(
+    xintercept = 1.15,
+    linewidth = 30,
+    color = "gray"
+  ) +
+  geom_text(
+    aes(x = 1.15, label = scales::dollar(tot/1e09)),
+    family = "mono",
+    fontface = "bold"
+  ) +
+  ggpal(
+    aes = "fill",
+    guide = guide_legend(reverse = T)
+  ) +
+  scale_x_continuous(
+    breaks = c(.5, 1.15),
+    labels = c("\nFlow Type (%)", "Total in\nbillions $"),
+    limits = c(0, 1.2)
+  ) +
+  labs(
+    title = str_wrap(
+      "China wants nearly all its money back",
+      width = 53
+    ),
+    subtitle = str_wrap(
+      "Totals broken down by flow type and income status, 2000-2023, according to AidData's Global China Data (version 1.0)",
+      width = 75
+    ),
+    x = NULL,
+    y = NULL,
+    fill = NULL,
+    caption = logo
+  ) +
+  theme(
+    panel.grid.major = element_blank()
+  )
+saveit(4, 5, 8)
+```
+
