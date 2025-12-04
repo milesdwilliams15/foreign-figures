@@ -37,6 +37,9 @@ my_theme <- function() {
       legend.title = element_text(
         hjust = .5,
         face = "bold.italic"
+      ),
+      legend.text = element_text(
+        face = "bold"
       )
     ) 
 }

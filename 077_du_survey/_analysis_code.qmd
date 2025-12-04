@@ -1,0 +1,283 @@
+---
+title: "DU survey"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+library(haven)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "gray80",
+    "navy",
+    "steelblue"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("gray", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "077_du_survey",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(googlesheets4)
+gs4_deauth()
+range_speedread(
+"https://docs.google.com/spreadsheets/d/1QKpkq8A58MEP2EXvoQPPPjz-WEuXtmIpjAaBGLvpVHc/edit?usp=sharing"
+) -> dt
+dt |>
+  janitor::clean_names() -> dt
+```
+
+Codebook: https://drive.google.com/file/d/1eB3PQxJ7iE2Yz_u15cUtPcRHEKViF6Uo/view
+
+Some recodes:
+
+```{r}
+dt |>
+  mutate(
+    across(
+      q30_1:q30_6,
+      ~ replace_na(.x, 0)
+    ),
+    across(
+      q31_1:q31_6,
+      ~ frcode(
+        .x == 5 ~ "Strongly\ndisagree",
+        .x == 4 ~ "Disagree",
+        .x == 3 ~ "Neither",
+        .x == 2 ~ "Agree",
+        .x == 1 ~ "Strongly\nagree"
+      )
+    )
+  ) |>
+  rowwise() |>
+  mutate(
+    ai_sum = sum(c_across(q30_1:q30_6)),
+    ai_any = (ai_sum > 0) + 0
+  ) |>
+  ungroup() |>
+  mutate(
+    grad_year = case_when(
+      q54 == 1 ~ 2026,
+      q54 == 2 ~ 2027,
+      q54 == 3 ~ 2028,
+      q54 == 4 ~ 2029
+    )
+  ) -> dt
+```
+
+## Figures
+
+How many students use AI?
+
+```{r}
+dt |>
+  mean_ci(ai_any)
+```
+
+That seems low compared to last semester. Are freshmen bringing the average down?
+
+```{r}
+dt |>
+  group_by(grad_year) |>
+  mean_ci(ai_any) |>
+  drop_na()
+```
+
+
+What do they use it for?
+
+```{r}
+#| fig-height: 4
+#| fig-width: 6
+
+dt |>
+  pivot_longer(
+    q30_1:q30_6
+  ) |>
+  group_by(name) |>
+  mean_ci(value) |>
+  mutate(
+    name = c(
+      "Background research",
+      "Summarize some reading",
+      "Write a paper",
+      "Edit a paper",
+      "Computer code",
+      "Something else"
+    )
+  ) |>
+  ggplot() +
+  aes(mean, reorder(name, mean)) +
+  geom_col(
+    fill = "navy"
+  ) +
+  geom_text(
+    aes(label = scales::percent(mean, 1)),
+    color = "orange",
+    hjust = 1.1,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  scale_x_continuous(
+    breaks = NULL
+  ) +
+  labs(
+    title = str_wrap(
+      "Most students use AI to get out of their readings",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "What students say they use AI to help with (DU Oct. 2025 Survey)",
+      width = 55
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    panel.grid.major = element_blank()
+  )
+saveit(1, 4, 6)
+```
+
+How many of those different uses do students engage in?
+
+```{r}
+#| fig-height: 4.5
+#| fig-width: 6
+dt |>
+  ct(ai_sum) |>
+  ggplot() +
+  aes(ai_sum, pct) +
+  geom_col(fill = "navy") +
+  geom_text(
+    aes(label = scales::percent(pct, 1)),
+    color = "orange",
+    family = "mono",
+    fontface = "bold",
+    vjust = 1.1
+  ) +
+  ggpubr::geom_bracket(
+    xmin = 1.5, xmax = 5.5,
+    y.position = .25,
+    label = "53% of students",
+    family = "mono",
+    fontface = "bold"
+  ) +
+  scale_x_continuous(
+    breaks = 0:6,
+    limits = c(-.5, 6)
+  ) +
+  scale_y_continuous(
+    breaks = NULL
+  ) +
+  labs(
+    title = str_wrap(
+      "Most students use AI for 2 or more tasks",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "% using AI for 0-6 tasks (DU October 2025 Survey)",
+      width = 55
+    ),
+    x = "\n# of tasks",
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    panel.grid.major = element_blank()
+  )
+saveit(2, 4.5, 6)
+```
+
+What are student attitudes about AI?
+
+```{r}
+#| fig-height: 6
+#| fig-width: 8
+
+dt |>
+  pivot_longer(q31_1:q31_6) |>
+  group_by(name) |>
+  ct(value, show_na = F, cum = T) |>
+  mutate(
+    ord = pct[value == "Strongly\nagree"]
+  ) |>
+  ungroup() |>
+  mutate(
+    name = rep(
+      c("I would appreciate the opportunity to use AI more in my coursework.",
+        "I am interested in understanding more about how AI works and how to use it effectively.",
+        "Using AI in coursework undermines the value of a college education.",
+        "Those who use AI for a paper (when unsanctioned) are likely to get caught.",
+        "AI is likely to be a benefit to humanity.",
+        "AI is likely to play an important role in my eventual career."
+        ),
+      each = 5
+    )
+  ) |>
+  ggplot() +
+  aes(
+    x = pct,
+    y = reorder(str_wrap(name, 30), ord),
+    fill = value
+  ) +
+  geom_col(
+    color = "black"
+  ) +
+  geom_text(
+    aes(x = 1 - (cum_pct - pct / 2), label = scales::percent(pct, 1)),
+    family = "mono",
+    fontface = "bold"
+  ) +
+  ggpal(
+    type = "diverging",
+    aes = "fill",
+    ordinal = T,
+    levels = 5,
+    guide = guide_legend(reverse = T)
+  )+
+  scale_x_continuous(
+    breaks = NULL
+  ) +
+  labs(
+    title = str_wrap("Most students believe AI undermines the value of a college education, and few think it will benefit humanity", width = 50),
+    subtitle = str_wrap(
+      "% agreement with statements about AI in coursework (DU October 2025 Survey)"
+    ),
+    x = NULL,
+    y = NULL,
+    fill = NULL,
+    caption = logo
+  ) +
+  theme(
+    panel.grid.major = element_blank()
+  )
+saveit(3, 6, 8)
+```
+
