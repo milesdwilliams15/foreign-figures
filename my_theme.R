@@ -40,6 +40,9 @@ my_theme <- function() {
       ),
       legend.text = element_text(
         face = "bold"
+      ),
+      strip.text = element_text(
+        face = "bold.italic"
       )
     ) 
 }

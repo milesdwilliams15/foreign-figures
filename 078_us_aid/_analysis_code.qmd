@@ -1,0 +1,394 @@
+---
+title: "Latest US foreign aid numbers"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+library(haven)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "gray80",
+    "navy",
+    "steelblue"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("gray", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "078_us_aid",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+read_csv(
+  here("_data", "us_foreign_aid_country.csv")
+) -> dt
+
+dt |>
+  janitor::clean_names() -> dt
+dt |>
+  mutate(
+    year = as.numeric(fiscal_year)
+  ) -> dt
+dt |>
+  filter(
+    transaction_type_name %in% c("Obligations", "Disbursements")
+  ) -> dt
+dt |>
+  filter(
+    !str_detect(
+      country_name, "World|Region"
+    )
+  ) -> dt
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 8
+dt |>
+  group_by(year, transaction_type_name) |>
+  summarize(
+    sum = sum(constant_amount, na.rm = T),
+    .groups = "drop"
+  ) |> 
+  ggplot() +
+  aes(year, sum, color = transaction_type_name) +
+  geom_line(
+    linewidth = .75
+  ) +
+  ggpal("binary") +
+  geom_label_repel(
+    data = . %>%
+      filter(
+        year == 2001,
+        transaction_type_name == "Disbursements"
+      ),
+    label = "Disbursement data\nbegins in 2001",
+    family = "mono",
+    fontface = "bold",
+    nudge_x = -30,
+    nudge_y = -1e10,
+    show.legend = F
+  ) +
+  scale_y_continuous(
+    labels = ~ scales::dollar(.x / 1e09)
+  ) +
+  labs(
+    title = str_wrap(
+      "2025 US foreign aid obligations are at an all time low of $13 billion",
+      width = 52
+    ),
+    subtitle = str_wrap(
+      "US aid obligations and disbursements in billions of constant $ (ForeignAssistance.gov)"
+    ),
+    x = NULL,
+    y = NULL,
+    color = NULL,
+    caption = logo
+  )
+saveit(1, 5, 8)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 8
+
+dt |>
+  filter(year > 2023, transaction_type_id == 2) |>
+  select(year, country_name, constant_amount) |>
+  pivot_wider(
+    names_from = year,
+    names_prefix = "amt_",
+    values_from = constant_amount
+  ) |>
+  mutate(
+    across(2:3, ~ replace_na(.x, 0))
+  ) |>
+  slice_max(amt_2024, n = 10) |>
+  ggplot() +
+  aes(
+    y = reorder(country_name, amt_2024)
+  ) +
+  geom_errorbarh(
+    aes(xmin = amt_2025, xmax = amt_2024),
+    height = 0,
+    linewidth = 1,
+    color = "gray"
+  ) +
+  geom_point(
+    aes(x = amt_2025, color = "2025")
+  ) +
+  geom_point(
+    aes(x = amt_2024, color = "2024")
+  ) +
+  ggpal("binary") +
+  labs(
+    title = str_wrap(
+      "Ukraine remains the top recipient, but aid obligations are down across the board",
+      width = 52
+    ),
+    subtitle = str_wrap(
+      "2024 vs. 2025 aid obligations by top 10 recipients as of 2024 (ForeignAssistance.gov)"
+    ),
+    x = "\nObligations in billions\nof constant $",
+    y = NULL,
+    color = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    labels = ~ scales::dollar(.x / 1e09)
+  )
+saveit(2, 5, 8)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 8
+dt |>
+  filter(
+    year > 2023,
+    transaction_type_id == 2
+  ) |>
+  group_by(year) |>
+  summarize(
+    "All recipients" = sum(constant_amount > 0, na.rm = T),
+    "> $1 million" = sum(constant_amount > 1e06, na.rm = T),
+    "> $10 million" = sum(constant_amount > 1e07, na.rm = T),
+    "> $100 million" = sum(constant_amount > 1e08, na.rm = T),
+    "> $1 billion" = sum(constant_amount > 1e09, na.rm = T)
+  ) |>
+  pivot_longer(
+    -year
+  ) |>
+  mutate(
+    name = factor(
+      name, 
+      levels = c(
+        "All recipients",
+        "> $1 million",
+        "> $10 million",
+        "> $100 million",
+        "> $1 billion"
+      )
+    )
+  ) |>
+  ggplot() +
+  aes(as.factor(year), value) +
+  geom_vline(
+    xintercept = 1.5,
+    linewidth = 300,
+    color = "gray80"
+  ) +
+  geom_col(
+    fill = "orange3",
+    width = .5
+  ) +
+  geom_text(
+    aes(label = value),
+    family = "mono",
+    fontface = "bold",
+    color = "navy",
+    vjust = -.1
+  )+
+  facet_wrap(~ name, nrow = 1) +
+  scale_y_continuous(
+    labels = NULL,
+    limits = c(0, 190)
+  ) +
+  theme(
+    panel.grid.major = element_blank()
+  ) +
+  labs(
+    title = str_wrap(
+      "Fewer countries got any aid in 2025 vs 2024, and even fewer got a substanial amount",
+      width = 50
+    ),
+    subtitle = "Counts of recipients by amount obligated (ForeignAssistance.gov)",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(3, 5, 8)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 8
+
+dt |>
+  filter(
+    year > 2023,
+    transaction_type_id == 2
+  ) |>
+  mutate(
+    income_status = frcode(
+      income_group_acronym == "LIC" ~ "Low Income",
+      income_group_acronym %in% c("LMIC", "UMIC") ~ "Middle Income",
+      income_group_acronym == "HIC" ~ "High Income"
+    )
+  ) |>
+  group_by(income_status, year) |>
+  summarize(
+    sum = sum(constant_amount, na.rm = T),
+    .groups = "drop"
+  ) |>
+  drop_na() |>
+  group_by(year) |>
+  mutate(
+    pct = sum / sum(sum),
+    cum_pct = cumsum(pct)
+  ) |>
+  ggplot() +
+  aes(pct, as.factor(year), fill = income_status) +
+  geom_col(
+    width = .55,
+    color = "black"
+  ) +
+  geom_text(
+    aes(label = scales::percent(pct, 1), x = 1 - cum_pct + pct / 2),
+    family = "mono",
+    fontface = "bold",
+    vjust = -4,
+    size = 5
+  ) +
+  ggpal(
+    "diverging",
+    "fill",
+    ordinal = T,
+    levels = 3,
+    guide = guide_legend(reverse = T)
+  ) +
+  scale_x_continuous(
+    breaks = NULL
+  ) +
+  theme(
+    panel.grid.major = element_blank(),
+    axis.text.y = element_text(
+      size = 16
+    )
+  ) +
+  labs(
+    title = str_wrap(
+      "Obligations in 2025 to middle income countries crowded out those to high income countries",
+      width = 52
+    ),
+    subtitle = str_wrap(
+      "% of all aid obligations by recipient country income status (ForeignAssistance.gov)",
+      width = 70
+    ),
+    x = NULL,
+    y = NULL,
+    fill = NULL,
+    caption = logo
+  )
+saveit(4, 5, 8)
+```
+
+Bring in some alliance data:
+
+```{r}
+library(peacesciencer)
+create_dyadyears() |>
+  add_atop_alliance() -> atop
+
+atop |>
+  drop_na() |>
+  filter(year == max(year), ccode1 == 2) -> atop
+
+atop |>
+  select(ccode2, starts_with("atop_")) -> atop
+
+dt |>
+  mutate(
+    ccode2 = countrycode::countrycode(
+      country_name, "country.name", "cown"
+    )
+  ) -> dt
+
+dt |>
+  left_join(
+    atop, by = "ccode2"
+  ) -> dt
+```
+
+
+```{r}
+#| fig-height: 4
+#| fig-width: 8
+
+dt |>
+  filter(
+    year > 2023,
+    transaction_type_id == 2
+  ) |>
+  drop_na() |>
+  select(
+    country_name, year, atop_defense,
+    constant_amount
+  ) |>
+  pivot_wider(
+    names_from = year,
+    names_prefix = "amt_",
+    values_from = constant_amount
+  ) |>
+  mutate(
+    across(3:4, ~ replace_na(.x, 0)),
+    across(3:4, ~ ifelse(.x < 0, 0, .x)),
+    diff = log(amt_2025 + 1) - log(amt_2024 + 1)
+  ) |>
+  group_by(atop_defense) |>
+  mean_ci(diff, ci = .84) |>
+  ggplot() +
+  aes(y = as.factor(atop_defense), x = mean, xmin = lower, xmax = upper) +
+  geom_pointrange(color = "navy") +
+  geom_vline(
+    xintercept = 0,
+    lty = 2
+  ) +
+  labs(
+    title = str_wrap(
+      "Cuts in 2025 obligations to allies were deeper than to non-allies",
+      width = 52
+    ),
+    subtitle = str_wrap(
+      "% change in obligations with 84% confidence intervals"
+    ),
+    y = NULL,
+    x = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    labels = ~ scales::percent(.x / 100)
+  ) +
+  scale_y_discrete(
+    labels = c("Non-Allies", "Allies")
+  )
+saveit(5, 4, 8)
+```
+
