@@ -341,6 +341,7 @@ dt |>
 ```{r}
 #| fig-height: 4
 #| fig-width: 8
+source(here("_helpers", "my_mean_ci.R"))
 
 dt |>
   filter(
@@ -362,22 +363,20 @@ dt |>
     across(3:4, ~ ifelse(.x < 0, 0, .x)),
     diff = log(amt_2025 + 1) - log(amt_2024 + 1)
   ) |>
-  group_by(atop_defense) |>
-  mean_ci(diff, ci = .84) |>
   ggplot() +
-  aes(y = as.factor(atop_defense), x = mean, xmin = lower, xmax = upper) +
-  geom_pointrange(color = "navy") +
+  aes(diff, as.factor(atop_defense)) +
+  stat_summary(fun.data = ~ my_mean_ci(.x, .84), color = "navy") +
   geom_vline(
     xintercept = 0,
     lty = 2
   ) +
   labs(
     title = str_wrap(
-      "Cuts in 2025 obligations to allies were deeper than to non-allies",
+      "Cuts in 2025 obligations to allies weren't much deeper than to non-allies",
       width = 52
     ),
     subtitle = str_wrap(
-      "% change in obligations with 84% confidence intervals"
+      "% change in obligations with bootstrapped 84% confidence intervals"
     ),
     y = NULL,
     x = NULL,
