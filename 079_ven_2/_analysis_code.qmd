@@ -1,0 +1,205 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+library(haven)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "gray80",
+    "navy",
+    "steelblue"
+  ),
+  binary = c("orange3", "steelblue"),
+  sequential = c("gray", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "079_ven_2",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+read_csv(
+  here("_data", "mie-1.0.csv")
+) -> dt
+
+## seizure is 15 action
+dt |>
+  mutate(
+    seizure = (action == 15) + 0
+  ) -> dt
+```
+
+
+## Figures
+
+How many actions short of war are seizures?
+
+```{r}
+dt |>
+  filter(hostlev < 5) |>
+  summarize(
+    n = n(),
+    sum = sum(seizure),
+    mean = scales::percent(sum / n, 1)
+  )
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+dt |>
+  group_by(micnum) |>
+  summarize(
+    Seizure = ifelse(max(seizure) == 1, "Yes", "No"),
+    "War (hostlev = 5)" = max(hostlev == 5) + 0,
+    "War (> 999 deaths)" = max(sum(fatalmin1 + fatalmin2) > 999) + 0
+  ) |>
+  pivot_longer(
+    3:4
+  ) |>
+  group_by(Seizure, name) |>
+  mean_ci(value, ci = .84) |>
+  ggplot() +
+  aes(Seizure, mean, ymin = lower, ymax = upper) +
+  geom_vline(
+    xintercept = 1.5,
+    linewidth = 300,
+    color = "gray80"
+  ) +
+  geom_col(
+    fill = "steelblue",
+    color = "black"
+  ) +
+  geom_errorbar(
+    width = .3,
+    linewidth = 1
+  ) +
+  geom_text(
+    aes(y = 0, label = scales::percent(mean, precision = 2)),
+    family = "mono",
+    fontface = "bold",
+    vjust = -.5
+  ) +
+  facet_wrap(~ name) +
+  scale_y_continuous(
+    breaks = NULL
+  ) +
+  labs(
+    title = str_wrap(
+      "Seizure predicts a 2x chance of escalation to war",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "% chance of war (Source: MIE, version 1.0)"
+    ),
+    x = "Seizure?",
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    panel.grid.major = element_blank()
+  )
+saveit(1, 5, 6)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 6
+dt |>
+  mutate(
+    fat = fatalmin1 + fatalmin2
+  ) |>
+  group_by(micnum) |>
+  summarize(
+    Seizure = frcode(
+      max(seizure) == 0 &
+        fat[eventnum == 1] == 0 ~ "No Seizure +\nNon-deadly Opening",
+      max(seizure) == 0 &
+        fat[eventnum == 1] > 0 ~ "No Seizure +\nDeadly Opening",
+      max(seizure) == 1 &
+        fat[eventnum == 1] == 0 ~ "Seizure +\nNon-deadly Opening",
+      max(seizure) == 1 &
+        fat[eventnum == 1] > 0 ~ "Seizure + \nDeadly Opening"
+    ),
+    "War (hostlev = 5)" = max(hostlev == 5) + 0,
+    "War (> 999 deaths)" = max(sum(fatalmin1 + fatalmin2) > 999) + 0
+  ) |>
+  pivot_longer(
+    3:4
+  ) |>
+  group_by(Seizure, name) |>
+  mean_ci(value, ci = .84) |>
+  ggplot() +
+  aes(x = Seizure, y = mean, ymin = lower, ymax = upper) +
+  geom_vline(
+    xintercept = 1.5,
+    linewidth = 300,
+    color = "gray80"
+  ) +
+  geom_col(
+    aes(fill = name),
+    color = "black",
+    position = "dodge"
+  ) +
+  geom_errorbar(
+    aes(group = name),
+    width = .3,
+    linewidth = 1,
+    position = "dodge"
+  ) +
+  geom_text(
+    aes(label = scales::percent(mean, 1),
+        group = name),
+    family = "mono",
+    fontface = "bold",
+    hjust = c(2.1, -1.1) |> rep(len = 8),
+    vjust = -.5,
+    position = "dodge"
+  ) +
+  scale_y_continuous(
+    breaks = NULL
+  ) +
+  labs(
+    title = str_wrap(
+      "Seizure + deadly openning predicts a 1-in-3 chance of escalation to war",
+      width = 37
+    ),
+    subtitle = str_wrap(
+      "% chance of war (Source: MIE, version 1.0)"
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    fill = NULL
+  ) +
+  theme(
+    panel.grid.major = element_blank()
+  ) +
+  ggpal("binary", "fill")
+saveit(2, 5, 6)
+```
