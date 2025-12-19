@@ -1,0 +1,288 @@
+---
+title: "Decline of order"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+library(haven)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "gray80",
+    "navy",
+    "steelblue",
+    "red3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("gray", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "080_decline_order",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(peacesciencer)
+source(
+  "https://raw.githubusercontent.com/milesdwilliams15/dpr-101-project-files/refs/heads/main/_helper_functions/peacesciencer_extras.R"
+)
+
+create_dyadyears(
+  directed = F,
+  subset_years = 1816:2014
+) |>
+  add_icd_mics(level = 4) |>
+  add_relevance() |>
+  add_int_order() |>
+  add_cow_trade() |>
+  add_fpsim() |>
+  add_igos() |>
+  add_strategic_rivalries() -> dt
+```
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 8
+
+dt |>
+  select(ccode1, ccode2, year, order) |>
+  pivot_longer(ccode1:ccode2) |>
+  group_by(value, year) |>
+  summarize(
+    order = max(order)
+  ) |>
+  group_by(year) |>
+  mean_ci(order) |>
+  ggplot() +
+  aes(year, mean) +
+  geom_line(linewidth = .75, color = "navy") +
+  labs(
+    title = str_wrap(
+      "Membership in any international order has varied a lot over the past 200 years",
+      width = 50
+    ),
+    subtitle = str_wrap(
+      "Source: Braumoeller (2019)"
+    ),
+    x = NULL,
+    y = "% of countries in an order",
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  )
+saveit(1, 5, 8)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 8
+
+dt |>
+  mutate(
+    rate = icdmiconset / prd2
+  ) |>
+  group_by(order_status) |>
+  mean_ci(rate, ci = .84) |>
+  ggplot() +
+  aes(x = mean, y = order_status, xmin = lower, xmax = upper) +
+  geom_pointrange(color = "navy") +
+  labs(
+    title = str_wrap(
+      "Orders preserve internal peace but exacerbate conflict with competing orders",
+      width = 50
+    ),
+    subtitle = str_wrap(
+      "Sources: MIC 1.0 + Braumoeller (2019)"
+    ),
+    x = "\nConflict Onsets per Relevance\n(with 84% CIs)",
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    labels = scales::percent
+  )
+saveit(2, 5, 8)
+```
+
+```{r}
+dt |>
+  group_by(year) |>
+  mutate(
+    trade = ((flow1 + flow2) / max(flow1 + flow2, na.rm = T))
+  ) |>
+  group_by(order_status) |>
+  mean_ci(trade, ci = .84) |>
+  drop_na() |>
+  ggplot() +
+  aes(mean, order_status, xmin = lower, xmax = upper) +
+  geom_pointrange(color = "navy") +
+  labs(
+    subtitle = "...trade more",
+    x = "Per yearly max",
+    y = NULL
+  ) -> p1
+
+dt |>
+  group_by(year) |>
+  group_by(order_status) |>
+  mean_ci(kappaba, ci = .84) |>
+  drop_na() |>
+  ggplot() +
+  aes(mean, order_status, xmin = lower, xmax = upper) +
+  geom_pointrange(color = "navy") +
+  labs(
+    subtitle = "...align on security policy",
+    x = "Alliance measure of alignment",
+    y = NULL
+  ) -> p2
+
+dt |>
+  group_by(order_status) |>
+  mean_ci(kappavv, ci = .84) |>
+  drop_na() |>
+  ggplot() +
+  aes(mean, order_status, xmin = lower, xmax = upper) +
+  geom_pointrange(color = "navy") +
+  labs(
+    subtitle = "...align ideologically",
+    x = "UN liberal order alignment",
+    y = NULL
+  ) -> p3
+
+dt |>
+  group_by(year) |>
+  mutate(
+    igos = dyadigos / max(dyadigos, na.rm = T)
+  ) |>
+  group_by(order_status) |>
+  mean_ci(igos, ci = .84) |>
+  drop_na() |>
+  ggplot() +
+  aes(mean, order_status, xmin = lower, xmax = upper) +
+  geom_pointrange(color = "navy") +
+  labs(
+    subtitle = "...join similar IGOs",
+    x = "IGO rate per yearly max",
+    y = NULL
+  ) -> p4
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 8.5
+
+library(patchwork)
+(p1 + p2) / (p3 + p4) +
+  plot_annotation(
+    title = "Orders tend to...",
+    caption = logo
+  )
+saveit(3, 5, 8.5)
+```
+
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 8
+
+## let's look at the concert and the SCO
+dt |>
+  mutate(
+    commies = pmin(c1.PostWarCommunist, c2.PostWarCommunist)
+  ) |>
+  group_by(ccode1, ccode2) |>
+  mutate(
+     post_commies = max(commies) * (year > 1991)
+  ) |>
+  ungroup() -> dt
+
+rescale <- function(x) {
+  (x - min(x, na.rm = T)) /
+    max(x - min(x, na.rm = T), na.rm = T)
+}
+
+dt |>
+  filter(commies == 1 | post_commies == 1) |>
+  mutate(
+    Conflict = icdmiconset / prd2,
+    Trade = ((flow1 + flow2) / max(flow1 + flow2, na.rm = T)),
+    IGOs = dyadigos / max(dyadigos, na.rm = T),
+    Security = kappaba,
+    Ideology = kappavv
+  ) |>
+  group_by(year) |>
+  summarize(
+    across(Conflict:Ideology, ~ mean(.x, na.rm = T)),
+    .groups = "drop"
+  ) |>
+  pivot_longer(Conflict:Ideology) |>
+  group_by(name) |>
+  mutate(value = rescale(value)) |>
+  ggplot() +
+  aes(year, value, color = name) +
+  geom_line(
+    linewidth = .75
+  ) +
+  geom_textvline(
+    xintercept = 1991,
+    label = "Collapse",
+    linetype = 2,
+    linewidth = .75,
+    color = "red3",
+    hjust = .95,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  ggpal() +
+  scale_x_continuous(
+    breaks = seq(1950, 2010, by = 10)
+  ) +
+  scale_y_continuous(
+    breaks = 0:1,
+    labels = c("Lowest", "Highest")
+  ) +
+  labs(
+    title = str_wrap(
+      "When the Soviet Order collapsed, so did trade, foreign policy similarity, joint IGO memberships, and ideological alignment",
+      width = 50
+    ),
+    subtitle = str_wrap(
+      "Yearly averages shown rescaled from 0 (lowest) to 1 (highest)"
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = NULL
+  ) +
+  theme(
+    panel.grid.major.x = element_blank()
+  )
+saveit(4, 5, 8.5)
+```
+
