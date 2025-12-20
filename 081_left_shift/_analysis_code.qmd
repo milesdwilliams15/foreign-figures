@@ -1,0 +1,306 @@
+---
+title: "Leftward shift of foreign students?"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+library(haven)
+library(patchwork)
+library(ggridges)
+set_palette(
+  qualitative = c(
+    "gray",
+    "red3",
+    "white",
+    "steelblue"
+  ),
+  binary = c("steelblue", "gray"),
+  sequential = c("gray", "navy"),
+  diverging = c("steelblue", "white", "red3")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "081_left_shift",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(googlesheets4)
+gs4_deauth()
+
+## urls to data
+fall_25 <- "https://docs.google.com/spreadsheets/d/1QKpkq8A58MEP2EXvoQPPPjz-WEuXtmIpjAaBGLvpVHc/edit?usp=drive_link"
+spring_25 <- "https://docs.google.com/spreadsheets/d/1npon5F_Gr40HQj8KVeHq_un7SOep4dzc6kjP0px7nLo/edit?usp=drive_link"
+fall_24 <- "https://docs.google.com/spreadsheets/d/1nNkg14Bb9JG22jzIfjqEWuPf7ejzi_ELEvrUsNMNm6Q/edit?usp=drive_link"
+spring_24 <- "https://docs.google.com/spreadsheets/d/1qq5VkNDzFonfEiRxf03NHvktzMsQNOWCzkXdkvkw9E8/edit?usp=drive_link"
+
+## read in the data
+f25 <- range_speedread(fall_25)
+s25 <- range_speedread(spring_25)
+f24 <- range_speedread(fall_24)
+s24 <- range_speedread(spring_24)
+
+## recode, pare down, and combine
+
+f25 |>
+  transmute(
+    survey = "Fall 2025",
+    pid = frcode(
+      Q3 < 4 ~ "Democrat",
+      Q3 == 4 ~ "Independent",
+      Q3 < 8 ~ "Republican",
+      TRUE ~ "Other"
+    ),
+    race = frcode(
+      Q47_1 == 1 ~ "White",
+      Q47_3 == 1 ~ "Black",
+      Q47_2 == 1 ~ "Hispanic",
+      Q47_4 == 1 ~ "Asian",
+      TRUE ~ "Other"
+    ),
+    trump_ft = Q13_1,
+    intnl = ifelse(
+      Q49 == 1, "Yes", "No"
+    )
+  ) -> f25
+s25 |>
+  transmute(
+    survey = "Spring 2025",
+    pid = frcode(
+      Q3 < 4 ~ "Democrat",
+      Q3 == 4 ~ "Independent",
+      Q3 < 8 ~ "Republican",
+      TRUE ~ "Other"
+    ),
+    race = frcode(
+      Q49_1 == 1 ~ "White",
+      Q49_3 == 1 ~ "Black",
+      Q49_2 == 1 ~ "Hispanic",
+      Q49_4 == 1 ~ "Asian",
+      TRUE ~ "Other"
+    ),
+    trump_ft = Q7_1,
+    intnl = ifelse(
+      Q51 == 1, "Yes", "No"
+    )
+  ) -> s25
+f24 |>
+  transmute(
+    survey = "Fall 2024",
+    pid = frcode(
+      Q3 < 4 ~ "Democrat",
+      Q3 == 4 ~ "Independent",
+      Q3 < 8 ~ "Republican",
+      TRUE ~ "Other"
+    ),
+    race = frcode(
+      Q57_1 == 1 ~ "White",
+      Q57_3 == 1 ~ "Black",
+      Q57_2 == 1 ~ "Hispanic",
+      Q57_4 == 1 ~ "Asian",
+      TRUE ~ "Other"
+    ),
+    trump_ft = Q17_1,
+    intnl = ifelse(
+      Q59 == 1, "Yes", "No"
+    )
+  ) -> f24
+s24 |>
+  transmute(
+    survey = "Spring 2024",
+    pid = frcode(
+      Q3 < 4 ~ "Democrat",
+      Q3 == 4 ~ "Independent",
+      Q3 < 8 ~ "Republican",
+      TRUE ~ "Other"
+    ),
+    race = frcode(
+      Q49_1 == 1 ~ "White",
+      Q49_3 == 1 ~ "Black",
+      Q49_2 == 1 ~ "Hispanic",
+      Q49_4 == 1 ~ "Asian",
+      TRUE ~ "Other"
+    ),
+    trump_ft = Q11_1,
+    intnl = ifelse(
+      Q51 == 1, "Yes", "No"
+    )
+  ) -> s24
+
+bind_rows(
+  f25, s25, f24, s24
+) -> dt
+
+dt |>
+  mutate(
+    survey = factor(
+      survey,
+      levels = c(
+        "Spring 2024",
+        "Fall 2024",
+        "Spring 2025",
+        "Fall 2025"
+      )
+    )
+  ) -> dt
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 7
+#| fig-width: 8
+
+dt |>
+  group_by(survey) |>
+  ct(pid, show_na = F) |>
+  mutate(
+    pid = factor(
+      pid,
+      levels = c("Other", "Republican", "Independent", "Democrat")
+    )
+  ) |>
+  ggplot() +
+  aes(pct, survey, fill = pid) +
+  geom_col(color = "black") +
+  ggpal(aes = "fill",
+        guide = guide_legend(reverse = T)) +
+  scale_x_continuous(
+    labels = scales::percent
+  ) +
+  labs(
+    x = NULL,
+    y = NULL,
+    fill = NULL,
+    subtitle = "% party ID"
+  ) -> p1
+
+ggplot(dt) +
+  aes(trump_ft, survey) +
+  geom_density_ridges(
+    quantile_lines = T,
+    quantile_fun = median
+  ) +
+  xlim(0, 100) +
+  labs(
+    x = NULL,
+    y = NULL,
+    subtitle = "Trump feeling thermometer (0-100)"
+  ) -> p2
+
+p1 / p2 +
+  plot_annotation(
+    title = str_wrap(
+      "Denison students overwhelmingly are Democrats and don't like Trump",
+      width = 50
+    ),
+    caption = logo
+  )
+saveit(1, 7, 8)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 8
+dt |>
+  group_by(survey) |>
+  ct(intnl, show_na = F) |>
+  ggplot() +
+  aes(pct, survey, fill = intnl) +
+  geom_col() +
+  ggpal("binary", "fill", guide = guide_legend(reverse = T)) +
+  scale_x_continuous(
+    labels = scales::percent 
+  ) +
+  labs(
+    title = str_wrap(
+      "International students only make up a small share of Denison student respondents",
+      width = 50
+    ),
+    x = NULL,
+    y = NULL,
+    subtitle = "% international students",
+    caption = logo,
+    fill = "International?"
+  )
+saveit(2, 5, 8)
+```
+
+
+```{r}
+#| fig-height: 7
+#| fig-width: 8
+
+dt |>
+  filter(intnl == "Yes") |>
+  group_by(survey) |>
+  ct(pid, show_na = F) |>
+  mutate(
+    pid = factor(
+      pid,
+      levels = c("Other", "Republican", "Independent", "Democrat")
+    )
+  ) |>
+  ggplot() +
+  aes(pct, survey, fill = pid) +
+  geom_col(color = "black") +
+  ggpal(aes = "fill",
+        guide = guide_legend(reverse = T)) +
+  scale_x_continuous(
+    labels = scales::percent
+  ) +
+  labs(
+    x = NULL,
+    y = NULL,
+    fill = NULL,
+    subtitle = "% party ID among int'l students"
+  ) -> p1
+
+ggplot(dt |> filter(intnl == "Yes")) +
+  aes(trump_ft, survey) +
+  geom_density_ridges(
+    quantile_lines = T,
+    quantile_fun = median
+  ) +
+  xlim(0, 100) +
+  labs(
+    x = NULL,
+    y = NULL,
+    subtitle = "Trump feeling thermometer (0-100) for int'l students"
+  ) -> p2
+
+p1 / p2 +
+  plot_annotation(
+    title = str_wrap(
+      "Spring 2025 was the high-water-mark for Democratic ID and dislike of Trump for int'l students",
+      width = 50
+    ),
+    caption = logo
+  )
+saveit(3, 7, 8)
+```
+
+
+

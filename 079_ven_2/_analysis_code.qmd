@@ -61,7 +61,6 @@ How many actions short of war are seizures?
 
 ```{r}
 dt |>
-  filter(hostlev < 5) |>
   summarize(
     n = n(),
     sum = sum(seizure),
@@ -186,7 +185,7 @@ dt |>
   ) +
   labs(
     title = str_wrap(
-      "Seizure + deadly openning predicts a 1-in-3 chance of escalation to war",
+      "Seizure + deadly opening predicts a 1-in-3 chance of escalation to war",
       width = 37
     ),
     subtitle = str_wrap(
