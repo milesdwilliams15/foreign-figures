@@ -294,7 +294,7 @@ ggplot(dt |> filter(intnl == "Yes")) +
 p1 / p2 +
   plot_annotation(
     title = str_wrap(
-      "Spring 2025 was the high-water-mark for Democratic ID and dislike of Trump for int'l students",
+      "Int'l students are less partisan and slightly less cold on Trump, but Spring 2025 was",
       width = 50
     ),
     caption = logo
@@ -303,4 +303,40 @@ saveit(3, 7, 8)
 ```
 
 
+```{r}
+range_speedread(
+  fall_25
+) -> f25
+
+f25 |>
+  transmute(
+    pid = frcode(
+      Q3 < 4 ~ "Democrat",
+      Q3 == 4 ~ "Independent",
+      Q3 < 8 ~ "Republican",
+      TRUE ~ "Other"
+    ),
+    race = frcode(
+      Q47_1 == 1 ~ "White",
+      Q47_3 == 1 ~ "Black",
+      Q47_2 == 1 ~ "Hispanic",
+      Q47_4 == 1 ~ "Asian",
+      TRUE ~ "Other"
+    ),
+    trump_ft = Q13_1,
+    intnl = ifelse(
+      Q49 == 1, "Yes", "No"
+    ),
+    year = Q54
+  ) -> f25
+
+f25 |>
+  filter(intnl == "Yes") |>
+  group_by(year) |>
+  summarize(
+    n = n(),
+    dems = mean(pid == "Democrat"),
+    ft   = median(trump_ft, na.rm = T)
+  )
+```
 

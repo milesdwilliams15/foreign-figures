@@ -1,0 +1,156 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+library(haven)
+library(patchwork)
+library(ggridges)
+set_palette(
+  qualitative = c("navy", "orange", "red3", "gray"),
+  binary = c("steelblue", "gray"),
+  sequential = c("gray", "navy"),
+  diverging = c("steelblue", "white", "red3")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "082_ven_sdp",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(globalmacrodata)
+source(here("_helpers", "est_sdp.R"))
+dt <- gmd(version = "2025_12")
+```
+
+```{r}
+dt |>
+  mutate(
+    sdp = est_sdp(rGDP_USD * 1e06, pop * 1e06, 3)
+  ) -> dt
+
+dt |>
+  filter(year >= 1960) -> dt
+
+dt |>
+  mutate(
+    region = countrycode::countrycode(
+      countryname, "country.name", "region"
+    )
+  ) -> dt
+
+dt |>
+  mutate(
+    reg_cats = frcode(
+      ISO3 == "USA" ~ "USA",
+      ISO3 %in% c(
+        "CAN",
+        "GBR",
+        "FRA",
+        "JPN",
+        "DEU",
+        "ITA"
+      ) ~ "G7 (minus USA)",
+      region == "Latin America & Caribbean" &
+        ISO3 != "VEN" ~ "Latin America & Caribbean (Minus Ven.)",
+      ISO3 == "VEN" ~ "Venezuela",
+      TRUE ~ NA
+    )
+  ) -> dt
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 8
+
+dt |>
+  drop_na(reg_cats) |>
+  ggplot() +
+  aes(year, sdp, color = reg_cats) +
+  stat_summary(
+    fun = ~ mean(.x, na.rm = T),
+    geom = "line"
+  ) +
+  scale_y_continuous(
+    labels = ~ scales::dollar(.x / 1e06)
+  ) +
+  ggpal() +
+  labs(
+    title = str_wrap(
+      "Venezuela's GDP barely registers",
+      width = 50
+    ),
+    subtitle = "Real GDP in 2015 values (trillions) - Global Macro Database v2025_12",
+    x = NULL,
+    y = NULL,
+    color = NULL,
+    caption = logo
+  )
+saveit(1, 5, 8)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 8
+
+dt |>
+  filter(ISO3 == "VEN") |>
+  ggplot() +
+  aes(year) +
+  geom_line(
+    aes(y = rGDP_USD, color = "GDP")
+  ) +
+  geom_line(
+    aes(y = sdp / 1e06, color = "SDP")
+  ) +
+  labs(
+    title = "Venezuela only enjoyed positive SDP after 2022",
+    color = NULL,
+    subtitle = "2015 values (in millions on log-10 scale) - Global Macro Database v2025_12",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_y_log10(
+    labels = scales::dollar
+  ) +
+  ggpal() 
+saveit(2, 5, 8)
+```
+
+```{r}
+dt |>
+  filter(
+    region == "Latin America & Caribbean",
+    year == 2024
+  ) |>
+  mutate(lps = round(100 * sdp / sum(sdp, na.rm = T), 3)) |>
+  arrange(lps) |>
+  select(countryname, lps)
+```
+

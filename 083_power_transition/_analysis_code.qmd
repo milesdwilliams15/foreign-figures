@@ -1,0 +1,245 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(ggrepel)
+library(coolorrr)
+library(here)
+library(haven)
+library(patchwork)
+library(ggridges)
+set_palette(
+  qualitative = c("navy", "orange", "red3", "gray"),
+  binary = c("steelblue", "gray"),
+  sequential = c("gray", "navy"),
+  diverging = c("steelblue", "white", "red3")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "083_power_transition",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(peacesciencer)
+source(here("_helpers", "peacesciencer_extras.R"))
+
+
+
+create_dyadyears(
+  subset_years = 1816:2014
+) |>
+  add_icd_mics() |>
+  add_relevance() |>
+  add_dissatisfaction() |>
+  add_cow_majors() -> dt
+  
+dt |>
+  mutate(
+    diss = ifelse(dissatisfaction1 > 0, "Dissatisfied", "Satisfied"),
+    maj1 = ifelse(cowmaj1 == 1, "Major Power", "Non-major Power"),
+    maj2 = ifelse(cowmaj2 == 1, "Major Power", "Non-major Power")
+  ) -> dt
+```
+
+## Analysis
+
+```{r}
+source(here("_helpers", "my_mean_ci.R"))
+```
+
+```{r}
+#| fig-height: 4.5
+#| fig-width: 7
+dt |>
+  filter(year > 1944) |>
+  drop_na() |>
+  group_by(diss, maj1) |>
+  summarize(my_mean_ci(icdmiconset_init1, ci = .84)) |>
+  ggplot() +
+  aes(maj1, y, ymin = ymin, ymax = ymax) +
+  geom_col(
+    aes(fill = diss),
+    position = "dodge"
+  ) +
+  geom_errorbar(
+    aes(group = diss),
+    position = "dodge",
+    width = .2
+  ) +
+  ggpal("binary", "fill") +
+  labs(
+    title = "Dissatisfaction predicts greater belligerence\nby major powers, 1945-2014",
+    subtitle = "Dyadic conflict initiation rate (with bootstrapped 84% CIs)",
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    fill = NULL
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  )
+saveit(1, 4.5, 7)
+```
+
+
+```{r}
+dt |>
+  filter(cowmaj1 == 1) |>
+  distinct(ccode1, year) |>
+  mutate(
+    name = countrycode::countrycode(ccode1, "cown", "country.name")
+  ) |>
+  group_by(name) |>
+  summarize(
+    year1 = min(year),
+    year2 = max(year)
+  )
+```
+
+
+```{r}
+#| fig-height: 4.5
+#| fig-width: 7
+lohi <- function(x) {
+  (x - min(x, na.rm = T)) / 
+    max(x - min(x, na.rm = T), na.rm = T)
+}
+dt |>
+  filter(year > 1944) |>
+  group_by(cowmaj1) |>
+  mutate(
+    dissatisfaction1 = lohi(dissatisfaction1)
+  ) |>
+  group_by(cowmaj1, ccode1, year) |>
+  summarize(
+    icdmiconset_init1 = any(icdmiconset_init1 == 1) + 0,
+    dissatisfaction1 = unique(dissatisfaction1)
+  ) |>
+  ggplot() +
+  aes(dissatisfaction1, icdmiconset_init1, color = cowmaj1 == 1) +
+  stat_smooth(
+    method = "glm",
+    method.args = list(family = binomial)
+  ) +
+  ggpal(
+    labels = c("Non-major Powers", "Major Powers")
+  ) +
+  labs(
+    title = "Dissatisfaction predicts greater belligerence\nby major powers, 1945-2014",
+    subtitle = "Predicted dyadic conflict initiation rate (with 95% CIs)",
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = NULL
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  ) +
+  scale_x_continuous(
+    labels = c(
+      "Most\nSatisfied",
+      rep(" ", len = 3),
+      "Most\nDissatisfied"
+    )
+  )
+saveit(3, 4.5, 7)
+```
+
+
+
+```{r}
+#| fig-height: 4.5
+#| fig-width: 7
+dt |>
+  filter(year > 1944, icdmiconset_init1 == 1) |>
+  drop_na() |>
+  mutate(
+    cat = paste0(diss, " ", maj1)
+  ) |>
+  group_by(cat) |>
+  summarize(x = mean(cowmaj2)) |>
+  ggplot() +
+  aes(x = x, y = cat) +
+  geom_col(
+    aes(x = 1, fill = "Non-major Power")
+  ) +
+  geom_col(
+    aes(fill = "Major Power")
+  ) +
+  geom_text(
+    aes(label = scales::percent(1 - x)),
+    hjust = -.2,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  geom_text(
+    aes(label = scales::percent(x, 1), x = 0),
+    hjust = -.2,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  ggpal("binary", "fill") +
+  labs(
+    title = "70% of the targets of dissatisifed major\npowers are non-major powers",
+    subtitle = "\nShare of targets by power status, by initator power status, among\ndissatisfied countries",
+    x = NULL,
+    y = NULL,
+    fill = "Target is...",
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = NULL
+  ) +
+  theme(
+    panel.grid.major.y = element_blank()
+  )
+saveit(2, 4.5, 7)
+```
+
+```{r}
+#| fig-height: 4.5
+#| fig-width: 7
+dt |>
+  distinct(ccode1, year, dissatisfaction1) |>
+  ggplot() +
+  aes(year, dissatisfaction1) +
+  geom_smooth(
+    aes(color = "Smoothed Global Average"),
+    method = "gam"
+  ) +
+  geom_line(
+    data = . %>% filter(ccode1 == 2),
+    aes(color = "The United States")
+  ) +
+  ggpal() +
+  labs(
+    title = "The U.S. has spent all of its history\ndissatisfied",
+    subtitle = "Level of dissatisfaction in the world vs. U.S.",
+    x = NULL,
+    y = NULL,
+    color = NULL,
+    caption = logo
+  )
+saveit(4, 4.5, 7)
+```
+
