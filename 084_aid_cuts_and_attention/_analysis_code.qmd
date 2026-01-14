@@ -1,0 +1,134 @@
+---
+title: "Aid cuts and attention"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "gray80",
+    "navy",
+    "steelblue"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "084_aid_cuts_and_attention",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+## Data
+
+```{r}
+read_csv(
+  "~/Research Projects/US Aid Cuts and Google Trends/usaid-cuts-and-google-trends/_data/merged_usaid_trends_24-25.csv"
+) -> main_dt
+read_csv(
+  "~/Research Projects/US Aid Cuts and Google Trends/usaid-cuts-and-google-trends/_data/gtrends_usaid_2004-2025.csv"
+) -> trend_dt
+
+trend_dt |>
+  mutate(
+    month = lubridate::ym(month),
+    usaid_hits = as.numeric(usaid_hits) |>
+      replace_na(0)
+  ) -> trend_dt
+```
+
+## Figures
+
+```{r}
+#| fig-height: 4.5
+#| fig-width: 7
+
+ggplot(trend_dt) +
+  aes(month, usaid_hits) +
+  geom_line(
+    linewidth = 1
+  ) +
+  geom_text_repel(
+    data = . %>% slice_max(usaid_hits, n = 1),
+    aes(
+      label = "USAID closure announced"
+    ),
+    nudge_x = -3000,
+    nudge_y = -10,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  labs(
+    title = str_wrap(
+      "Global interest in USAID never was as high as when its closure was announced",
+      width = 45
+    ),
+    subtitle = "Google search volume (0-100 scale) from Google Trends",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(1, 4.5, 7)
+```
+
+```{r}
+#| fig-height: 4.5
+#| fig-width: 7
+
+ggplot(main_dt) +
+  aes(
+    x = asinh(disbursed_2024 / gdp_2024) / 
+      max(asinh(disbursed_2024 / gdp_2024), na.rm = T),
+    y = usaid_hits
+  ) +
+  geom_point() +
+  geom_smooth(
+    method = "gam",
+    color = "navy"
+  ) +
+  labs(
+    title = str_wrap(
+      "Attention to USAID was most concentrated in U.S. aid-dependent countries",
+      width = 45
+    ),
+    subtitle = "Search volume by aid dependence in 2024",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = 0:1,
+    labels = c(
+      expression(""%<-%" No Aid Dependence"),
+      expression("Highest Aid Dependence "%->%"")
+    )
+  ) +
+  theme(
+    axis.text.x = element_text(
+      hjust = c(0, 1)
+    ),
+    panel.grid.major.x = element_blank()
+  )
+saveit(2, 4.5, 7)
+```
+
+
+
