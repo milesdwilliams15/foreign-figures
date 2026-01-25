@@ -230,14 +230,6 @@ mie |>
   ) |>
   filter(date >= "1892-01-01") -> mod_dt
 
-library(mgcv)
-gam(
-  log(n) ~ log(lag_n) + ww1 + ww2 + olympics,
-  data = mod_dt
-  #family = quasipoisson
-) -> fit
-
-library(estimatr)
 lm_robust(
   log(n) ~ log(lag_n) + ww1 + ww2 + olympics,
   data = mod_dt,
@@ -271,7 +263,7 @@ coeftest(fit) |>
   ) +
   labs(
     title = "Summer games only moderately predict MIEs\nin a statistical model",
-    subtitle = "Pseudo-Poisson estimates with 95% CIs (90% noted with |)",
+    subtitle = "OLS estimates with 95% CIs (90% noted with |)",
     x = "Model Estimate",
     y = NULL,
     caption = logo
