@@ -226,12 +226,14 @@ mie |>
       date >= "1939-09-01" &
         date <= "1945-09-01",
       1, 0
-    )
+    ),
+    stmon = month(date)
   ) |>
   filter(date >= "1892-01-01") -> mod_dt
 
 lm_robust(
   log(n) ~ log(lag_n) + ww1 + ww2 + olympics,
+  fixed_effects = ~ stmon,
   data = mod_dt,
   se_type = "HC1"
 ) -> fit
@@ -264,13 +266,12 @@ coeftest(fit) |>
   labs(
     title = "Summer games only moderately predict MIEs\nin a statistical model",
     subtitle = "OLS estimates with 95% CIs (90% noted with |)",
-    x = "Model Estimate",
+    x = "Model Estimate\n(Note: month indicators not included)",
     y = NULL,
     caption = logo
   ) +
   scale_y_discrete(
     labels = c(
-      "(Intercept)",
       "Events Last\nMonth (log)",
       "Summer\nGames",
       "Winter\nGames",
