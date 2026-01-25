@@ -1,0 +1,62 @@
+Year,Season,Host City,Host Country,Opening Date,Closing Date,Notes
+1896,Summer,Athens,Greece,1896-04-06,1896-04-15,
+1900,Summer,Paris,France,1900-05-14,1900-10-28,
+1904,Summer,St. Louis,United States,1904-07-01,1904-11-23,
+1908,Summer,London,United Kingdom,1908-04-27,1908-10-31,
+1912,Summer,Stockholm,Sweden,1912-05-05,1912-07-27,
+1916,Summer,Berlin,Germany,,,Cancelled (World War I)
+1920,Summer,Antwerp,Belgium,1920-04-20,1920-09-12,
+1924,Summer,Paris,France,1924-05-04,1924-07-27,
+1928,Summer,Amsterdam,Netherlands,1928-07-28,1928-08-12,
+1932,Summer,Los Angeles,United States,1932-07-30,1932-08-14,
+1936,Summer,Berlin,Germany,1936-08-01,1936-08-16,
+1940,Summer,Tokyo,Japan,,,Cancelled (World War II)
+1944,Summer,London,United Kingdom,,,Cancelled (World War II)
+1948,Summer,London,United Kingdom,1948-07-29,1948-08-14,
+1952,Summer,Helsinki,Finland,1952-07-19,1952-08-03,:contentReference[oaicite:0]{index=0}
+1956,Summer,Melbourne,Australia,1956-11-22,1956-12-08,
+1960,Summer,Rome,Italy,1960-08-25,1960-09-11,
+1964,Summer,Tokyo,Japan,1964-10-10,1964-10-24,
+1968,Summer,Mexico City,Mexico,1968-10-12,1968-10-27,
+1972,Summer,Munich,West Germany,1972-08-26,1972-09-11,:contentReference[oaicite:1]{index=1}
+1976,Summer,Montreal,Canada,1976-07-17,1976-08-01,
+1980,Summer,Moscow,Soviet Union,1980-07-19,1980-08-03,
+1984,Summer,Los Angeles,United States,1984-07-28,1984-08-12,
+1988,Summer,Seoul,South Korea,1988-09-17,1988-10-02,
+1992,Summer,Barcelona,Spain,1992-07-25,1992-08-09,:contentReference[oaicite:2]{index=2}
+1996,Summer,Atlanta,United States,1996-07-19,1996-08-04,:contentReference[oaicite:3]{index=3}
+2000,Summer,Sydney,Australia,2000-09-15,2000-10-01,
+2004,Summer,Athens,Greece,2004-08-13,2004-08-29,
+2008,Summer,Beijing,China,2008-08-08,2008-08-24,
+2012,Summer,London,United Kingdom,2012-07-27,2012-08-12,
+2016,Summer,Rio de Janeiro,Brazil,2016-08-05,2016-08-21,
+2020,Summer,Tokyo,Japan,2021-07-23,2021-08-08,Postponed to 2021
+2024,Summer,Paris,France,2024-07-26,2024-08-11,:contentReference[oaicite:4]{index=4}
+2028,Summer,Los Angeles,United States,2028-07-14,2028-07-30,:contentReference[oaicite:5]{index=5}
+1924,Winter,Chamonix,France,1924-01-25,1924-02-05,
+1928,Winter,St. Moritz,Switzerland,1928-02-11,1928-02-19,
+1932,Winter,Lake Placid,United States,1932-02-04,1932-02-15,
+1936,Winter,Garmisch-Partenkirchen,Germany,1936-02-06,1936-02-16,
+1940,Winter,,Cancelled,Cancelled,Cancelled (World War II)
+1944,Winter,,Cancelled,Cancelled,Cancelled (World War II)
+1948,Winter,St. Moritz,Switzerland,1948-01-30,1948-02-08,
+1952,Winter,Oslo,Norway,1952-02-14,1952-02-25,
+1956,Winter,Cortina d'Ampezzo,Italy,1956-01-26,1956-02-05,
+1960,Winter,Squaw Valley,United States,1960-02-18,1960-02-28,
+1964,Winter,Innsbruck,Austria,1964-01-29,1964-02-09,
+1968,Winter,Grenoble,France,1968-02-06,1968-02-18,
+1972,Winter,Sapporo,Japan,1972-02-03,1972-02-13,
+1976,Winter,Innsbruck,Austria,1976-02-04,1976-02-15,
+1980,Winter,Lake Placid,United States,1980-02-13,1980-02-24,
+1984,Winter,Sarajevo,Yugoslavia,1984-02-08,1984-02-19,
+1988,Winter,Calgary,Canada,1988-02-13,1988-02-28,
+1992,Winter,Albertville,France,1992-02-08,1992-02-23,
+1994,Winter,Lillehammer,Norway,1994-02-12,1994-02-27,
+1998,Winter,Nagano,Japan,1998-02-07,1998-02-22,
+2002,Winter,Salt Lake City,United States,2002-02-08,2002-02-24,
+2006,Winter,Torino,Italy,2006-02-10,2006-02-26,
+2010,Winter,Vancouver,Canada,2010-02-12,2010-02-28,
+2014,Winter,Sochi,Russia,2014-02-07,2014-02-23,
+2018,Winter,Pyeongchang,South Korea,2018-02-09,2018-02-25,
+2022,Winter,Beijing,China,2022-02-04,2022-02-20,:contentReference[oaicite:6]{index=6}
+2026,Winter,Milan & Cortina d'Ampezzo,Italy,2026-02-06,2026-02-22,:contentReference[oaicite:7]{index=7}

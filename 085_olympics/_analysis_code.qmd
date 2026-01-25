@@ -1,0 +1,291 @@
+---
+title: "Counter programming"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(here)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "gray80",
+    "navy",
+    "steelblue"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "085_olympics",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+## mie dataset
+read_csv(
+  here("_data", "mie-1.0.csv")
+) -> mie
+
+## olympics dataset
+read_csv(
+  here("_data", "olympics_gpt.csv")
+) -> oly
+
+oly |>
+  transmute(
+    styear = Year,
+    season = Season,
+    start_date = ymd(`Opening Date`) |> round_date("month"),
+    end_date = ymd(`Closing Date`) |> round_date("month")
+  ) -> oly
+
+mie |>
+  left_join(oly) -> mie
+
+```
+
+Think up a smart way to combine these...
+
+```{r}
+mie |>
+  mutate(
+    date = ym(paste0(styear, "-", stmon)),
+    olympics = ifelse(
+      date >= start_date & date <= end_date,
+      1, 0
+    ) |>
+      replace_na(0)
+  ) -> mie
+```
+
+
+## Figures
+
+Computer, what's the frequency of MIEs over time?
+
+```{r}
+#| fig-height: 4.5
+#| fig-width: 7
+
+mie |>
+  count(date) |>
+  ggplot() +
+  aes(date, n) +
+  geom_line(linewidth = 1) +
+  labs(
+    title = "28,011 MIEs took place from 1816 to 2014",
+    subtitle = "Monthly MIE (militarized interstate event) frequency",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(1, 4.5, 7)
+```
+
+
+Computer, overlay vertical lines in the plot for years the Olympics took place and color them based on summer vs winter.
+
+```{r}
+#| fig-height: 4.5
+#| fig-width: 7
+
+mie |>
+  group_by(olympics) |>
+  count(date) |>
+  ggplot() +
+  aes(date, n) +
+  geom_line(linewidth = 1) +
+  geom_vline(
+    data = . %>% filter(olympics == 1),
+    aes(xintercept = date, color = "Olympics"),
+    linewidth = 1
+  ) +
+  labs(
+    title = "Olympics are more frequent over time and\nwere cancelled during the World Wars",
+    subtitle = "Monthly MIE (militarized interstate event) frequency",
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = NULL
+  ) +
+  ggpal() +
+  theme(
+    legend.position = c(.2, .8),
+    legend.background = element_rect(
+      fill = "gray"
+    )
+  )
+saveit(2, 4.5, 7)
+```
+
+Now, Computer, tell me what the average MIE rate was in Olympics vs. non-Olympics months.
+
+```{r}
+#| fig-height: 3.5
+#| fig-width: 7
+source(here("_helpers", "my_mean_ci.R"))
+mie |>
+  filter(
+    !(styear %in% c(1914:1918, 1939:1945)) &
+        styear >= (min(oly$styear) - 4)
+  ) |>
+  group_by(olympics) |>
+  count(date) |>
+  group_by(olympics) |>
+  summarize(my_mean_ci(n, ci = .84)) |>
+  mutate(olympics = c("No Olympics", "Olympics")) |>
+  ggplot() +
+  aes(x = y, xmin = ymin, xmax = ymax, y = olympics) +
+  geom_pointrange() +
+  labs(
+    title = "MIEs are less likely during the Olympics",
+    subtitle = "MIEs per month with bootstrapped 84% CIs",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(3, 3.5, 7)
+```
+
+
+```{r}
+#| fig-height: 3.5
+#| fig-width: 7
+source(here("_helpers", "my_mean_ci.R"))
+mie |>
+  filter(
+    !(styear %in% c(1914:1918, 1939:1945)) &
+        styear >= (min(oly$styear) - 4)
+  ) |>
+  mutate(
+    olympics = frcode(
+      olympics == 0 ~ "No Olympics",
+      olympics == 1 & season == "Summer" ~ "Summer",
+      olympics == 1 & season == "Winter" ~ "Winter"
+    )
+  ) |>
+  group_by(olympics) |>
+  count(date) |>
+  group_by(olympics) |>
+  summarize(my_mean_ci(n, ci = .84)) |>
+  ggplot() +
+  aes(x = y, xmin = ymin, xmax = ymax, y = olympics) +
+  geom_pointrange() +
+  labs(
+    title = "Winter Olympics don't seem to matter",
+    subtitle = "MIEs per month with bootstrapped 84% CIs",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(4, 3.5, 7)
+```
+
+
+```{r}
+mie |>
+  mutate(
+    olympics = frcode(
+      olympics == 0 ~ "No Olympics",
+      olympics == 1 & season == "Summer" ~ "Summer",
+      olympics == 1 & season == "Winter" ~ "Winter"
+    )
+  ) |>
+  group_by(olympics) |>
+  count(date) |>
+  ungroup() |>
+  mutate(
+    lag_n = lag(n, n = 1, order_by = date),
+    ww1 = ifelse(
+      date >= "1914-07-01" &
+        date <= "1917-11-01",
+      1, 0
+    ),
+    ww2 = ifelse(
+      date >= "1939-09-01" &
+        date <= "1945-09-01",
+      1, 0
+    )
+  ) |>
+  filter(date >= "1892-01-01") -> mod_dt
+
+library(mgcv)
+gam(
+  log(n) ~ log(lag_n) + ww1 + ww2 + olympics,
+  data = mod_dt
+  #family = quasipoisson
+) -> fit
+
+library(estimatr)
+lm_robust(
+  log(n) ~ log(lag_n) + ww1 + ww2 + olympics,
+  data = mod_dt,
+  se_type = "HC1"
+) -> fit
+summary(fit)
+```
+
+```{r}
+#| fig-height: 4.5
+#| fig-width: 7
+
+coeftest(fit) |>
+  broom::tidy() |>
+  mutate(
+    lo95 = estimate - 1.96 * std.error,
+    hi95 = estimate + 1.96 * std.error,
+    lo90 = estimate - 1.645 * std.error,
+    hi90 = estimate + 1.645 * std.error
+  ) |>
+  ggplot() +
+  aes(x = estimate, xmin = lo95, xmax = hi95, y = term) +
+  geom_pointrange() +
+  geom_errorbarh(
+    aes(xmin = lo90, xmax = hi90),
+    height = .2
+  ) +
+  geom_vline(
+    xintercept = 0,
+    linetype = 2
+  ) +
+  labs(
+    title = "Summer games only moderately predict MIEs\nin a statistical model",
+    subtitle = "Pseudo-Poisson estimates with 95% CIs (90% noted with |)",
+    x = "Model Estimate",
+    y = NULL,
+    caption = logo
+  ) +
+  scale_y_discrete(
+    labels = c(
+      "(Intercept)",
+      "Events Last\nMonth (log)",
+      "Summer\nGames",
+      "Winter\nGames",
+      "WW1",
+      "WW2"
+    )
+  )
+saveit(5, 4.5, 7)
+```
+
