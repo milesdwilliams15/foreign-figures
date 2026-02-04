@@ -1,0 +1,193 @@
+---
+title: "WW1 vs WW2"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(here)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "navy",
+    "steelblue"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "086_world_wars",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+## Data
+
+```{r}
+## good thing I made this for my students already:
+source("https://raw.githubusercontent.com/milesdwilliams15/death-destruction-data/refs/heads/main/helpers/get_mie_data.R")
+get_mie_data() -> dt
+```
+
+```{r}
+## just the world wars
+dt |>
+  filter(micnum %in% 257:258) |>
+  mutate(
+    war = ifelse(micnum == 257, "WW1", "WW2")
+  ) -> dt
+```
+
+## Figures
+
+```{r}
+#| fig-height: 4.5
+#| fig-width: 7
+dt |>
+  group_by(war) |>
+  count(date) |>
+  ggplot() +
+  aes(date, n) +
+  geom_line(
+    aes(color = "Monthly Total"),
+    linewidth = .75
+  ) +
+  geom_smooth(
+    aes(color = "Overall Average"),
+    method = "lm",
+    se = F,
+    formula = y ~ 1
+  ) +
+  geom_smooth(
+    aes(color = "Smoothed Trend"),
+    method = "lm",
+    formula = y ~ poly(x, 3),
+    se = F,
+    linetype = 2
+  ) +
+  facet_wrap(~ war, scales = "free_x") +
+  labs(
+    title = "WW1 saw more battles per month than WW2",
+    subtitle = "Battles per Month (MIE dataset version 1.0)",
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = NULL
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, 500, by = 25)
+  ) +
+  ggpal()
+saveit(1, 4.5, 7)
+```
+
+Total battles:
+
+```{r}
+dt |>
+  count(war)
+```
+
+
+```{r}
+#| fig-height: 4.5
+#| fig-width: 7
+dt |>
+  group_by(war, date) |>
+  summarize(
+    n = sum(fatalmax1 + fatalmax2)
+  ) |>
+  ggplot() +
+  aes(date, n) +
+  geom_line(
+    aes(color = "Monthly Total"),
+    linewidth = .75
+  ) +
+  geom_smooth(
+    aes(color = "Overall Average"),
+    method = "lm",
+    se = F,
+    formula = y ~ 1
+  ) +
+  geom_smooth(
+    aes(color = "Smoothed Trend"),
+    method = "lm",
+    formula = y ~ poly(x, 3),
+    se = F,
+    linetype = 2
+  ) +
+  facet_wrap(~ war, scales = "free_x") +
+  labs(
+    title = "Both wars saw about as many deaths per month\n(but WW2 witnessed bigger extremes)",
+    subtitle = "Millions of Battle Deaths per Month (MIE dataset version 1.0)",
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = NULL
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, 1.5e06, by = 1e05),
+    labels = ~ scales::comma(.x / 1e06)
+  ) +
+  ggpal()
+saveit(2, 4.5, 7)
+```
+
+Total deaths:
+
+```{r}
+dt |>
+  group_by(war) |>
+  summarize(min = sum(fatalmin1 + fatalmin2), max = sum(fatalmax1 + fatalmax2))
+```
+
+
+
+```{r}
+#| fig-height: 4.5
+#| fig-width: 7
+## death per battle
+source(here("_helpers", "my_mean_ci.R"))
+dt |>
+  group_by(war) |>
+  summarize(
+    my_mean_ci(fatalmax1 + fatalmax2)
+  ) |> 
+  ggplot() +
+  aes(war, y, ymin = ymin, ymax = ymax) +
+  geom_pointrange(color = "navy") +
+  labs(
+    title = "Deaths per battle were much higher in WW2",
+    subtitle = "Average deaths per battle (MIE dataset version 1.0)",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = scales::comma
+  ) +
+  theme(panel.grid.major.x = element_blank())
+saveit(3, 4.5, 7)
+```
+
+Some big takeaways:
+
+1. WW1 saw a more pronounced upward trend in war battles and far more battles overall (thanks to trench warfare) than WW2.
+2. WW2 saw a more pronounced upward trend in battle deaths and more deaths per battle overall (thanks to developments in military technology) than WW1.
+3. More fighting doesn't always equate to more deaths. Technology and the style of warfare matter, too.
