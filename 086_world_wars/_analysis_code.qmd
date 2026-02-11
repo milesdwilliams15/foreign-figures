@@ -43,7 +43,40 @@ saveit <- function(num = 1, ht = 4, wd = 6) {
 ## good thing I made this for my students already:
 source("https://raw.githubusercontent.com/milesdwilliams15/death-destruction-data/refs/heads/main/helpers/get_mie_data.R")
 get_mie_data() -> dt
+
+dt |>
+  mutate(
+    date2 = paste0(endyear, "-", endmon) |> ym()
+  ) -> dt
+
+dt |>
+  filter(micnum %in% 257:257) |>
+  mutate(
+    diff = date2 - date
+  ) |>
+  count(diff) |>
+  mutate(pct = n / sum(n)) 
 ```
+
+```{r}
+dt |>
+  group_by(micnum) |>
+  summarize(
+    fatal = sum(fatalmin1 + fatalmin2)
+  ) |>
+  mutate(
+    ww = ifelse(micnum %in% c(257, 258), 1, 0)
+  ) |>
+  group_by(ww) |>
+  summarize(
+    fatal = sum(fatal)
+  ) |>
+  ungroup() |>
+  mutate(
+    pct = fatal / sum(fatal)
+  )
+```
+
 
 ```{r}
 ## just the world wars
@@ -55,6 +88,12 @@ dt |>
 ```
 
 ## Figures
+
+```{r}
+dt |>
+  count(war)
+```
+
 
 ```{r}
 #| fig-height: 4.5
@@ -84,7 +123,7 @@ dt |>
   facet_wrap(~ war, scales = "free_x") +
   labs(
     title = "WW1 saw more battles per month than WW2",
-    subtitle = "Battles per Month (MIE dataset version 1.0)",
+    subtitle = "Battles Initiated per Month (MIE dataset version 1.0)",
     x = NULL,
     y = NULL,
     caption = logo,
@@ -109,12 +148,12 @@ dt |>
 #| fig-height: 4.5
 #| fig-width: 7
 dt |>
-  group_by(war, date) |>
+  group_by(war, date2) |>
   summarize(
     n = sum(fatalmax1 + fatalmax2)
   ) |>
   ggplot() +
-  aes(date, n) +
+  aes(date2, n) +
   geom_line(
     aes(color = "Monthly Total"),
     linewidth = .75
@@ -142,7 +181,7 @@ dt |>
     color = NULL
   ) +
   scale_y_continuous(
-    breaks = seq(0, 1.5e06, by = 1e05),
+    breaks = seq(0, 2e06, by = 1e05),
     labels = ~ scales::comma(.x / 1e06)
   ) +
   ggpal()
@@ -191,3 +230,20 @@ Some big takeaways:
 1. WW1 saw a more pronounced upward trend in war battles and far more battles overall (thanks to trench warfare) than WW2.
 2. WW2 saw a more pronounced upward trend in battle deaths and more deaths per battle overall (thanks to developments in military technology) than WW1.
 3. More fighting doesn't always equate to more deaths. Technology and the style of warfare matter, too.
+
+```{r}
+325000 / ((2026 - (2022 + 2/12)) * 12)
+```
+
+```{r}
+dt |>
+  group_by(war, date) |>
+  summarize(
+    sum = sum(fatalmax1 + fatalmax2)
+  ) |>
+  group_by(war) |>
+  summarize(
+    mean = mean(sum)
+  )
+```
+
