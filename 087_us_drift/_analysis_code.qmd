@@ -1,0 +1,541 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(here)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "steelblue",
+    "navy",
+    "red3",
+    "gray"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "087_us_drift",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+## Data
+
+```{r}
+
+## latest ideal point data
+haven::read_dta(
+  here("_data", "IdealpointsJuly2025.dta")
+) -> dt
+
+## democracy data
+library(peacesciencer)
+create_stateyears(
+  subset_years = 1946:2024
+) |>
+  add_democracy() -> dem_dt
+
+left_join(
+  dt,
+  dem_dt,
+  by = c("ccode", "year")
+) -> dt
+
+## order data
+source(
+  here("_helpers", "peacesciencer_extras.R")
+)
+create_dyadyears(
+  subset_years = 1946:2024
+) |>
+  add_int_order() -> int_dt
+
+int_dt |>
+  mutate(ccode = ccode1) |>
+  group_by(ccode, year) |>
+  summarize(
+    wlo = any(
+      c1.PostWarLiberal == 1 |
+          c1.PostCWLiberal == 1
+      ) + 0,
+    com = any(
+      c1.PostWarCommunist == 1 |
+        c1.WarsawPact == 1
+      ) + 0
+  ) -> int_dt
+
+left_join(
+  dt, 
+  int_dt,
+  by = c("ccode", "year")
+) -> dt
+```
+
+
+## Analysis
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+ggplot(dt) +
+  aes(year, idealpointfp) +
+  geom_line(
+    aes(group = ccode),
+    color = "gray"
+  ) +
+  geom_line(
+    data = . %>% filter(ccode == 2),
+    aes(color = "United States"),
+    linewidth = 1
+  ) +
+  geom_smooth(
+    aes(color = "Global trend"),
+    se = F,
+    method = "gam"
+  ) +
+  ggpal() +
+  labs(
+    title = 
+      "As of 2024 the US aligned with Liberal Order\npolicies",
+    subtitle = 
+      "UN ideal points, 1946-2024 (Bailey, Strezhnev, Voeten 2017)",
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = NULL
+  ) +
+  scale_x_continuous(
+    breaks = seq(1950, 2020, by = 10)
+  ) +
+  theme(
+    axis.text.x = element_text(
+      angle = 45, hjust = 1
+    )
+  )
+saveit(1, 5, 7)
+```
+
+```{r}
+dt |>
+  group_by(ccode) |>
+  mutate(
+    max = max(idealpointfp, na.rm = T)
+  ) |>
+  distinct(iso3c, max) |>
+  arrange(-max) |>
+  mutate(
+    name = countrycode::countrycode(
+      iso3c, "iso3c", "country.name"
+    )
+  )
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+ggplot(dt) +
+  aes(v2x_polyarchy, idealpointfp) +
+  geom_point(
+    alpha = .4,
+    color = "gray"
+  ) +
+  geom_smooth(
+    method = "lm",
+    formula = y ~ poly(x, 2),
+    se = F,
+    color = "navy"
+  ) +
+  labs(
+    title =
+      "Democracies align more with the liberal order",
+    subtitle = 
+      "Ideal points and V-Dem scores, 1946-2024",
+    x = "V-Dem Score",
+    y = "Ideal Point",
+    caption = logo
+  )
+saveit(2, 5, 7)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  filter(
+    ccode == 2
+  ) |>
+  ggplot() +
+  aes(v2x_polyarchy, idealpointfp) +
+  geom_point(
+    color = "gray"
+  ) +
+  geom_smooth(
+    method = "lm",
+    formula = y ~ poly(x, 2),
+    se = F,
+    color = "navy"
+  ) +
+  labs(
+    title =
+      "The US aligns more with the liberal order the\nstronger its democracy score",
+    subtitle = 
+      "\nUS Ideal points and V-Dem scores, 1946-2024",
+    x = "V-Dem Score",
+    y = "Ideal Point",
+    caption = logo
+  )
+saveit(3, 5, 7)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  mutate(
+    order = frcode(
+      wlo == 1 ~ "Liberal",
+      com == 1 ~ "Communist",
+      TRUE ~ "Other"
+    )
+  ) -> dt
+
+ggplot(dt) +
+  aes(year, idealpointfp, color = order) +
+  # geom_point(alpha = .1) +
+  # geom_smooth(
+  #   aes(group = order),
+  #   color = "black",
+  #   se = F,
+  #   linewidth = 2
+  # ) +
+  geom_smooth(
+    se = T,
+    method = "gam"
+  ) +
+  ggpal() +
+  labs(
+    title = 
+      str_wrap(
+        "The slow erosion of liberal policy support in the Liberal Order broadly",
+        width = 45
+      ),
+    subtitle = 
+      "Ideal points by order status, 1946-2024",
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = NULL
+  ) +
+  scale_x_continuous(
+    breaks = seq(1950, 2020, by = 10)
+  ) +
+  theme(
+    axis.text.x = element_text(
+      angle = 45, hjust = 1
+    )
+  )
+saveit(4, 5, 7)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  group_by(ccode) |>
+  mutate(
+    evercom = max(com, na.rm = T)
+  ) |>
+  ungroup() |>
+  mutate(
+    order2 = frcode(
+      wlo == 1 & evercom == 0 ~ "Liberal",
+      com == 1 ~ "Communist",
+      wlo == 1 & evercom == 1 ~ "Converts",
+      wlo == 0 & evercom == 1 & year > 1990 ~ "Legacy",
+      TRUE ~ "Other"
+    )
+  ) -> dt
+
+ggplot(dt) +
+  aes(year, idealpointfp, color = order2) +
+  #geom_point(alpha = .1) +
+  # geom_smooth(
+  #   aes(group = order2),
+  #   color = "black",
+  #   se = F,
+  #   linewidth = 2
+  # ) +
+  geom_smooth(
+    se = T,
+    method = "gam"
+  ) +
+  ggpal() +
+  labs(
+    title = 
+      str_wrap(
+        "Communist converts don't explain the mild erosion in liberal policy support",
+        width = 45
+      ),
+    subtitle = 
+      "Ideal points by order status, 1946-2024",
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = NULL
+  ) +
+  scale_x_continuous(
+    breaks = seq(1950, 2020, by = 10)
+  ) +
+  theme(
+    axis.text.x = element_text(
+      angle = 45, hjust = 1
+    )
+  )
+saveit(5, 5, 7)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+ggplot(dt) +
+  aes(year, v2x_polyarchy, color = order2) +
+  #geom_point(alpha = .1) +
+  # geom_smooth(
+  #   aes(group = order2),
+  #   color = "black",
+  #   se = F,
+  #   linewidth = 2
+  # ) +
+  geom_smooth(
+    se = T,
+    method = "gam"
+  ) +
+  ggpal() +
+  labs(
+    title = 
+      str_wrap(
+        "Evidence of democratic backsliding among Communist Order converts and Communist Order legacies",
+        width = 45
+      ),
+    subtitle = 
+      "Ideal points by order status, 1946-2024",
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = NULL
+  ) +
+  scale_x_continuous(
+    breaks = seq(1950, 2020, by = 10)
+  ) +
+  theme(
+    axis.text.x = element_text(
+      angle = 45, hjust = 1
+    )
+  )
+saveit(6, 5, 7)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  group_by(ccode) |>
+  mutate(
+    idlag = lag(idealpointfp, order_by = year)
+  ) |>
+  ungroup() -> dt
+
+library(estimatr)
+lm_robust(
+  idealpointfp ~ 
+    v2x_polyarchy + idlag + order2 + poly(year, 3),
+  fixed_effects = ~ ccode,
+  data = dt,
+  se_type = "stata",
+  clusters = ccode
+) -> fit
+summary(fit)
+```
+
+```{r}
+tidy(fit) |>
+  filter(term == "v2x_polyarchy") |>
+  select(estimate, conf.low, conf.high) |>
+  round(3)
+```
+
+Going from being a strong autocracy at one extreme to a strong democracy at the other only predicts a 0.063 standard deviation shift toward supporting Liberal Order policies. The estimate is statistically significant, but it's practically negligible. Democratic backsliding isn't a great explanation for eroding support for liberal order policies. 
+
+If I had to guess, I'd say the better explanation is "too many cooks." 
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+rs <- function(x) {
+  (x - min(x)) / max(x - min(x))
+}
+dt |>
+  filter(order == "Liberal") |>
+  group_by(year) |>
+  summarize(
+    n = n(),
+    idp = mean(idealpointfp, na.rm = T)
+  ) |>
+  ungroup() |>
+  mutate(
+    ns = rs(n),
+    idps = rs(idp)
+  ) |>
+  ggplot() +
+  aes(year) +
+  geom_line(
+    aes(y = ns, color = "# of members"),
+    linewidth = .75
+  ) +
+  geom_line(
+    aes(y = idps, color = "Avg. ideal point"),
+    linewidth = .75
+  ) +
+  geom_label(
+    data = . %>% filter(year == c(1946, 2024)),
+    aes(y = ns, label = n, color = "# of members"),
+    show.legend = F
+  ) +
+  geom_label(
+    data = . %>% filter(year == c(1946, 2024)),
+    aes(y = idps, label = round(idp, 1), color = "Avg. ideal point"),
+    show.legend = F
+  ) +
+  scale_y_continuous(
+    breaks = 0:1,
+    labels = c("Lowest", "Highest")
+  ) +
+  scale_x_continuous(
+    breaks = seq(1950, 2020, by = 10)
+  ) +
+  theme(
+    axis.text.x = element_text(
+      angle = 45, hjust = 1
+    ),
+    axis.text.y = element_text(
+      angle = 90, hjust = c(0, 1)
+    )
+  ) +
+  labs(
+    title = str_wrap(
+      "Alignment with Liberal Order policies declines with increasing membership",
+      width = 45
+    ),
+    subtitle = "Trend shown by lowest to highest values",
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = NULL
+  ) +
+  ggpal()
+saveit(6, 5, 7)
+```
+
+
+
+
+
+```{r}
+dt |>
+  filter(
+    order == "Liberal"
+  ) |>
+  group_by(year) |>
+  mutate(
+    n = n()
+  ) |>
+  lm_robust(
+  idealpointfp ~ 
+    v2x_polyarchy + idlag + poly(year, 3),
+  fixed_effects = ~ ccode,
+  data = _,
+  se_type = "stata",
+  clusters = ccode
+) -> fit1
+dt |>
+  filter(
+    order == "Liberal"
+  ) |>
+  group_by(year) |>
+  mutate(
+    n = n()
+  ) |>
+  lm_robust(
+  idealpointfp ~ 
+    v2x_polyarchy + log(n) + idlag + poly(year, 3) +
+    as.factor(iso3c),
+  data = _,
+  se_type = "stata",
+  clusters = ccode
+) -> fit2
+summary(fit2)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+tidy(fit2) |>
+  filter(
+    term %in% c("v2x_polyarchy", "log(n)")
+  ) |>
+  ggplot() +
+  aes(
+    estimate,
+    xmin = conf.low,
+    xmax = conf.high,
+    y = term
+  ) +
+  geom_pointrange() +
+  geom_vline(
+    xintercept = 0,
+    lty = 2
+  ) +
+  labs(
+    title = str_wrap(
+      "Order size, not democracy, explains support for Liberal Order policies",
+      width = 45
+    ),
+    subtitle = "OLS estimates with cluster-robust 95% CIs",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_y_discrete(
+    labels = c("Members (ln)", "Democracy")
+  )
+saveit(7, 5, 7)
+```
+
