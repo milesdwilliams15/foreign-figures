@@ -1,0 +1,261 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(here)
+library(countrycode)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "steelblue",
+    "navy",
+    "red3",
+    "gray"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "088_medal_counts",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+
+## Data
+
+Source: https://www.kaggle.com/datasets/heesoo37/120-years-of-olympic-history-athletes-and-results?resource=download
+
+```{r}
+read_csv(
+  here("_data", "athlete_events.csv")
+) -> dt
+
+dt |>
+  group_by(Team, Year, Season) |>
+  summarize(
+    n_ath = n_distinct(ID),
+    gold = sum(Medal == "Gold", na.rm = T),
+    silver = sum(Medal == "Silver", na.rm = T),
+    bronze = sum(Medal == "Bronze", na.rm = T),
+    .groups = "drop"
+  ) |>
+  mutate(
+    ccode = countrycode(Team, "country.name", "cown")
+  ) |>
+  drop_na(ccode) |>
+  select(ccode, everything()) |>
+  janitor::clean_names() -> dt
+```
+
+```{r}
+## okay so multiple teams per country. I can fix that.
+dt |>
+  group_by(ccode, year) |>
+  filter(n_ath == max(n_ath)) |>
+  ungroup() -> dt
+
+dt |>
+  mutate(
+    total = gold + silver + bronze
+  ) -> dt
+
+## bring in peacescience data
+library(peacesciencer)
+create_stateyears() |>
+  add_sim_gdp_pop() |>
+  add_democracy() -> ps_dt
+
+dt |>
+  left_join(
+    ps_dt
+  ) -> dt
+```
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+ggplot(dt) +
+  aes(year, total, color = season) +
+  geom_path(
+    aes(group = ccode),
+    linewidth = .1
+  ) +
+  geom_path(
+    data = . %>% filter(ccode == 2),
+    linewidth = 1
+  ) +
+  facet_wrap(~ season) +
+  ggpal("binary") +
+  theme(
+    legend.position = ""
+  ) +
+  labs(
+    title = str_wrap(
+      "The US regularly dominates in the Olympics"
+    ),
+    subtitle = str_wrap(
+      "Total medal counts by country (U.S. in bold), 1896-2016"
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(1, 5, 7)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+ggplot(dt) +
+  aes(year, n_ath, color = season) +
+  geom_path(
+    aes(group = ccode),
+    linewidth = .1
+  ) +
+  geom_path(
+    data = . %>% filter(ccode == 2),
+    linewidth = 1
+  ) +
+  facet_wrap(~ season) +
+  ggpal("binary") +
+  theme(
+    legend.position = ""
+  ) +
+  labs(
+    title = str_wrap(
+      "The US sends large Olympic delegations"
+    ),
+    subtitle = str_wrap(
+      "Total athletes by country (U.S. in bold), 1896-2016"
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(2, 5, 7)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+library(mgcv) 
+dt |>
+  mutate(
+    pwtrgdp = pwtrgdp / 1e06
+  ) -> dt
+gam(
+  total ~ log(n_ath) +
+    log(pwtpop) +
+    log(pwtrgdp) +
+    v2x_polyarchy +
+    season +
+    poly(year, 3) +
+    s(ccode, bs = "re"),
+  data = dt,
+  family = quasipoisson
+) -> fit
+
+summary(fit)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+library(patchwork)
+library(sjPlot)
+
+pm <- function(fit, term, name) {
+  suppressWarnings(plot_model(fit, "pred", terms = term)) +
+    labs(
+      title = NULL,
+      y = NULL,
+      x = name
+    ) +
+    scale_x_continuous(
+      labels = scales::comma
+    )
+}
+
+p1 <- pm(fit, "n_ath", "Delegation")
+p2 <- pm(fit, "pwtpop", "Population (mil)")
+p3 <- pm(fit, "pwtrgdp", "GDP (tril)")
+p4 <- pm(fit, "v2x_polyarchy", "Democracy")
+
+(p1 + p2) / (p3 + p4) +
+  plot_annotation(
+    title = "Model predictions for total medals",
+    subtitle = "Random country intercepts and cubic time trend not shown",
+    caption = logo
+  ) 
+saveit(3, 5, 7)
+```
+
+```{r}
+gam(
+  n_ath ~
+    log(pwtpop) +
+    log(pwtrgdp) +
+    v2x_polyarchy +
+    season +
+    poly(year, 3) +
+    s(ccode, bs = "re"),
+  data = dt,
+  family = quasipoisson
+) -> fit2
+
+summary(fit2)
+```
+
+```{r}
+#| fig-height: 8
+#| fig-width: 7
+
+p1 <- pm(fit2, "pwtpop", "Population (mil)")
+p2 <- pm(fit2, "pwtrgdp", "GDP (tril)")
+p3 <- pm(fit2, "v2x_polyarchy", "Democracy")
+
+p1 / p2 / p3 +
+  plot_annotation(
+    title = "Model predictions for total delegates",
+    subtitle = "Random country intercepts and cubic time trend not shown",
+    caption = logo
+  )
+saveit(4, 8, 7)
+```
+
+
+Notes:
+
+* Why does no one have a free and easy to access country-year dataset of Olympic medal counts??
+* US does disproportionately well
+* US sends a lot of athletes (so easiest explanation for performance is a numbers game)
+* Other factors make a marginal difference, too: population (unexpectedly negative), size of the economy (positive), and democracy (unexpectedly negative).
+* Democracy is odd, but it also predicts an ability to send a larger delegation so...
+
