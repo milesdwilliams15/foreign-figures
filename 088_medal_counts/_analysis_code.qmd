@@ -75,22 +75,25 @@ dt |>
 left_join(
   n_aths,
   n_medals
-) -> n_sum
+) |> ungroup() -> n_sum
 
 n_sum |>
   distinct(
     Team
   ) -> teams
 
-teams |>
-  mutate(
-    ccode = countrycode(Team, "country.name", "cown")
-  ) -> teams
+teams$ccode <-
+  suppressWarnings(countrycode(
+    teams$Team,
+    "country.name",
+    "cown"
+  ))
 
-n_sum |>
-  mutate(
-    ccode = countrycode(Team, "country.name", "cown")
-  ) |>
+left_join(
+  n_sum,
+  teams,
+  by = "Team"
+) |> ungroup() |>
   drop_na(ccode) |>
   select(ccode, everything()) |>
   janitor::clean_names() -> n_sum
@@ -119,7 +122,7 @@ Let's make this sucker publically available:
 
 ```{r}
 write_csv(
-  dt,
+  final_dt,
   here("_data", "olympics_data.csv")
 )
 ```
@@ -131,7 +134,7 @@ write_csv(
 #| fig-height: 5
 #| fig-width: 7
 
-ggplot(dt) +
+ggplot(final_dt) +
   aes(year, total, color = season) +
   geom_path(
     aes(group = ccode),
@@ -165,7 +168,7 @@ saveit(1, 5, 7)
 #| fig-height: 5
 #| fig-width: 7
 
-ggplot(dt) +
+ggplot(final_dt) +
   aes(year, n_ath, color = season) +
   geom_path(
     aes(group = ccode),
@@ -198,7 +201,7 @@ saveit(2, 5, 7)
 #| fig-height: 5
 #| fig-width: 7
 
-ggplot(dt) +
+ggplot(final_dt) +
   aes(n_ath, total) +
   geom_point(color = "gray") +
   geom_smooth(
@@ -229,7 +232,7 @@ gam(
     season +
     poly(year, 3) +
     s(ccode, bs = "re"),
-  data = dt,
+  data = final_dt,
   family = quasipoisson
 ) -> fit
 
@@ -284,7 +287,7 @@ gam(
     season +
     poly(year, 3) +
     s(ccode, bs = "re"),
-  data = dt,
+  data = final_dt,
   family = quasipoisson
 ) -> fit2
 
