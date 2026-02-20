@@ -54,31 +54,54 @@ read_csv(
 dt |>
   group_by(Team, Year, Season) |>
   summarize(
-    n_ath = n_distinct(ID),
-    gold = sum(Medal == "Gold", na.rm = T),
-    silver = sum(Medal == "Silver", na.rm = T),
-    bronze = sum(Medal == "Bronze", na.rm = T),
+    n_ath = n_distinct(ID)
+  ) -> n_aths
+
+dt |>
+  group_by(Team, Year, Season, Event) |>
+  summarize(
+    gold = any(Medal == "Gold") + 0,
+    silver = any(Medal == "Silver") + 0,
+    bronze = any(Medal == "Bronze") + 0,
     .groups = "drop"
   ) |>
+  group_by(Team, Year, Season) |>
+  summarize(
+    across(gold:bronze, ~ sum(.x, na.rm = T)),
+    total = gold + silver + bronze,
+    .groups = "drop"
+  ) -> n_medals
+
+left_join(
+  n_aths,
+  n_medals
+) -> n_sum
+
+n_sum |>
+  distinct(
+    Team
+  ) -> teams
+
+teams |>
+  mutate(
+    ccode = countrycode(Team, "country.name", "cown")
+  ) -> teams
+
+n_sum |>
   mutate(
     ccode = countrycode(Team, "country.name", "cown")
   ) |>
   drop_na(ccode) |>
   select(ccode, everything()) |>
-  janitor::clean_names() -> dt
+  janitor::clean_names() -> n_sum
 ```
 
 ```{r}
 ## okay so multiple teams per country. I can fix that.
-dt |>
+n_sum |>
   group_by(ccode, year) |>
   filter(n_ath == max(n_ath)) |>
-  ungroup() -> dt
-
-dt |>
-  mutate(
-    total = gold + silver + bronze
-  ) -> dt
+  ungroup() -> n_sum
 
 ## bring in peacescience data
 library(peacesciencer)
@@ -86,11 +109,21 @@ create_stateyears() |>
   add_sim_gdp_pop() |>
   add_democracy() -> ps_dt
 
-dt |>
+n_sum |>
   left_join(
     ps_dt
-  ) -> dt
+  ) -> final_dt
 ```
+
+Let's make this sucker publically available:
+
+```{r}
+write_csv(
+  dt,
+  here("_data", "olympics_data.csv")
+)
+```
+
 
 ## Figures
 
@@ -192,7 +225,7 @@ gam(
   total ~ log(n_ath) +
     log(pwtpop) +
     log(pwtrgdp/pwtpop) +
-    v2x_polyarchy +
+    log(v2x_polyarchy) +
     season +
     poly(year, 3) +
     s(ccode, bs = "re"),
@@ -222,18 +255,21 @@ fit |>
   geom_vline(xintercept = 0, lty = 2) +
   labs(
     title = "Which countries get an edge in medals?",
-    subtitle = "PPML estimates with 95% CIs\n(includes controls for season, time, and random country effects)",
-    x = NULL,
+    x = "PPML estimates\n(season, time, and random recipient effects not shown)",
+    subtitle = "% change in medals per a % change in predictors",
     y = NULL,
     caption = logo
   ) +
   scale_y_discrete(
     labels = c(
       "Delegation (ln)",
-      "GDP per capita (ln)",
       "Population (ln)",
+      "GDP per capita (ln)",
       "Democracy"
     )
+  ) +
+  scale_x_continuous(
+    labels = ~ paste0(.x, "%")
   )
 saveit(4, 5, 7)
 ```
@@ -244,7 +280,7 @@ gam(
   n_ath ~
     log(pwtpop) +
     log(pwtrgdp / pwtpop) +
-    v2x_polyarchy +
+    log(v2x_polyarchy) +
     season +
     poly(year, 3) +
     s(ccode, bs = "re"),
@@ -262,26 +298,38 @@ summary(fit2)
 fit2 |>
   lmtest::coeftest() |>
   broom::tidy() |>
-  ggplot()
-```
-
-
-```{r}
-#| fig-height: 8
-#| fig-width: 7
-
-p1 <- pm(fit2, "pwtpop", "Population (mil)")
-p2 <- pm(fit2, "pwtrgdp", "GDP (tril)")
-p3 <- pm(fit2, "v2x_polyarchy", "Democracy")
-
-p1 / p2 / p3 +
-  plot_annotation(
-    title = "Model predictions for total delegates",
-    subtitle = "Random country intercepts and cubic time trend not shown",
+  mutate(
+    lower = estimate - 1.96 * std.error,
+    upper = estimate + 1.96 * std.error
+  ) |>
+  slice(2:4) |>
+  ggplot() +
+  aes(
+    estimate, term, xmin = lower, xmax = upper
+  ) +
+  geom_pointrange() +
+  geom_vline(xintercept = 0, lty = 2) +
+  labs(
+    title = "Which countries send bigger delegations?",
+    x = "PPML estimates\n(season, time, and random recipient effects not shown)",
+    subtitle = "% change in delegates per a % change in predictors",
+    y = NULL,
     caption = logo
+  ) +
+  scale_y_discrete(
+    labels = c(
+      "Population (ln)",
+      "GDP per capita (ln)",
+      "Democracy"
+    )
+  ) +
+  scale_x_continuous(
+    labels = ~ paste0(.x, "%")
   )
-saveit(4, 8, 7)
+saveit(5, 5, 7)
 ```
+
+
 
 
 Notes:
