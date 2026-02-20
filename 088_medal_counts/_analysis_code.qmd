@@ -165,15 +165,33 @@ saveit(2, 5, 7)
 #| fig-height: 5
 #| fig-width: 7
 
+ggplot(dt) +
+  aes(n_ath, total) +
+  geom_point(color = "gray") +
+  geom_smooth(
+    method = "gam",
+    se = F,
+    color = "navy"
+  ) +
+  labs(
+    title = "A larger delegation = more medals",
+    x = "Delegation",
+    y = "Medals",
+    caption = logo
+  )
+saveit(3, 5, 7)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
 library(mgcv) 
-dt |>
-  mutate(
-    pwtrgdp = pwtrgdp / 1e06
-  ) -> dt
 gam(
   total ~ log(n_ath) +
     log(pwtpop) +
-    log(pwtrgdp) +
+    log(pwtrgdp/pwtpop) +
     v2x_polyarchy +
     season +
     poly(year, 3) +
@@ -184,44 +202,48 @@ gam(
 
 summary(fit)
 ```
-
 ```{r}
 #| fig-height: 5
 #| fig-width: 7
-library(patchwork)
-library(sjPlot)
 
-pm <- function(fit, term, name) {
-  suppressWarnings(plot_model(fit, "pred", terms = term)) +
-    labs(
-      title = NULL,
-      y = NULL,
-      x = name
-    ) +
-    scale_x_continuous(
-      labels = scales::comma
-    )
-}
-
-p1 <- pm(fit, "n_ath", "Delegation")
-p2 <- pm(fit, "pwtpop", "Population (mil)")
-p3 <- pm(fit, "pwtrgdp", "GDP (tril)")
-p4 <- pm(fit, "v2x_polyarchy", "Democracy")
-
-(p1 + p2) / (p3 + p4) +
-  plot_annotation(
-    title = "Model predictions for total medals",
-    subtitle = "Random country intercepts and cubic time trend not shown",
+fit |>
+  lmtest::coeftest() |>
+  broom::tidy() |>
+  mutate(
+    lower = estimate - 1.96 * std.error,
+    upper = estimate + 1.96 * std.error
+  ) |>
+  slice(2:5) |>
+  ggplot() +
+  aes(
+    estimate, term, xmin = lower, xmax = upper
+  ) +
+  geom_pointrange() +
+  geom_vline(xintercept = 0, lty = 2) +
+  labs(
+    title = "Which countries get an edge in medals?",
+    subtitle = "PPML estimates with 95% CIs\n(includes controls for season, time, and random country effects)",
+    x = NULL,
+    y = NULL,
     caption = logo
-  ) 
-saveit(3, 5, 7)
+  ) +
+  scale_y_discrete(
+    labels = c(
+      "Delegation (ln)",
+      "GDP per capita (ln)",
+      "Population (ln)",
+      "Democracy"
+    )
+  )
+saveit(4, 5, 7)
 ```
+
 
 ```{r}
 gam(
   n_ath ~
     log(pwtpop) +
-    log(pwtrgdp) +
+    log(pwtrgdp / pwtpop) +
     v2x_polyarchy +
     season +
     poly(year, 3) +
@@ -232,6 +254,17 @@ gam(
 
 summary(fit2)
 ```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+fit2 |>
+  lmtest::coeftest() |>
+  broom::tidy() |>
+  ggplot()
+```
+
 
 ```{r}
 #| fig-height: 8
