@@ -1,0 +1,435 @@
+---
+title: "CC survey"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(here)
+library(countrycode)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "steelblue",
+    "navy",
+    "red3",
+    "gray"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "089_cc_survey",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+read_csv(
+  here("_data", "chicago_council_svy.csv")
+) -> dt
+
+names(dt) <- c(
+  "year",
+  "us_role",
+  "nato_commitment",
+  "weaker_nations",
+  "usa_jobs",
+  "human_rights",
+  "defense",
+  "mil_aid",
+  "ec_aid",
+  "gender",
+  "ethnicity",
+  "education",
+  "generation",
+  "region",
+  "party",
+  "weights"
+)
+
+dt |>
+  mutate(
+    us_role1 = ifelse(
+      us_role == "Stay out", 1, 0
+    ),
+    nato_commitment1 = ifelse(
+      nato_commitment %in% c("Decrease commitment", "Withdraw entirely"),
+      1, 0
+    ),
+    weaker_nations1 = ifelse(
+      weaker_nations == "Not important at all",
+      1, 0
+    ),
+    usa_jobs1 = ifelse(
+      usa_jobs == "Not important at all",
+      1, 0
+    ),
+    usa_jobs1_rev = 1 - usa_jobs1,
+    human_rights1 = ifelse(
+      human_rights == "Not important at all",
+      1, 0
+    ),
+    defense1 = ifelse(
+      defense == "Cut back",
+      1, 0
+    ),
+    defense1_rev = 1 - defense1,
+    mil_aid1 = ifelse(
+      mil_aid == "Cut back",
+      1, 0
+    ),
+    ec_aid1 = ifelse(
+      ec_aid == "Cut back",
+      1, 0
+    )
+  ) -> dt
+
+dt |>
+  mutate(
+    Male = ifelse(gender == "Male", 1, 0),
+    White = ifelse(ethnicity == "White", 1, 0),
+    College = ifelse(education == "Bachelor's degree or higher", 1, 0),
+    Age = case_when(
+      generation == "Gen Z" ~ 0,
+      generation == "Millennial" ~ 1,
+      generation == "Gen X" ~ 2,
+      generation == "Boomer" ~ 3,
+      generation == "Greatest" ~ 4,
+      generation == "Silent" ~ 5
+    ),
+    Republican = ifelse(party == "Republican", 1, 0),
+    Independent = ifelse(party %in% c("Independent", "Refused"), 1, 0)
+  ) -> dt
+
+dt |>
+  rowwise() |>
+  mutate(
+    wi = mean(c_across(ends_with("1")), na.rm = T)
+  ) |>
+  ungroup() -> dt
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  filter(ec_aid != "Refused") |>
+  group_by(year) |>
+  ct(ec_aid, weights) |>
+  ggplot() +
+  aes(year, pct, color = ec_aid, linetype = ec_aid) +
+  geom_line(
+    linewidth = .1
+  ) +
+  geom_point() +
+  geom_smooth(
+    method = "gam",
+    se = F
+  ) +
+  ggpal() +
+  labs(
+    title = "The stable consensus on cutting aid",
+    subtitle = "Source: Chicago Council on Global Affairs Survey",
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = NULL,
+    linetype = NULL
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  )
+saveit(1, 5, 7)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  pivot_longer(
+    ends_with("1")
+  ) |>
+  group_by(year, name) |>
+  ct(value, weights, show_na = F) |>
+  filter(value == 1) |>
+  mutate(
+    name = str_replace_all(name, "_", " ") |>
+      str_remove_all("1") |>
+      str_to_upper()
+  ) |>
+  ggplot() +
+  aes(year, pct) +
+  geom_line(
+    linewidth = .1
+  ) +
+  geom_point() +
+  geom_smooth(
+    method = "gam",
+    se = F,
+    color = "steelblue"
+  ) +
+  facet_wrap(~ name) +
+  labs(
+    title = "Preference for ending support by issue",
+    subtitle = "Source: Chicago Council on Global Affairs Survey",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = scales::percent,
+    limits = 0:1
+  )
+saveit(2, 5, 7)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+ggplot(dt) +
+  aes(wi) |>
+  geom_histogram(
+    color = "black",
+    fill = "orange"
+  ) +
+  labs(
+    title = "Americans score low on my 'withdraw index'",
+    subtitle = "Source: Chicago Council on Global Affairs Survey",
+    x = "WI score",
+    y = "Count",
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = scales::comma
+  )
+saveit(3, 5, 7)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  group_by(year) |>
+  mean_ci(wi, weights) |>
+  ggplot() +
+  aes(year, mean, ymin = lower, ymax = upper) +
+  geom_line(linewidth = .1) +
+  geom_pointrange(size = .1) +
+  geom_smooth(
+    method = "gam",
+    se = F,
+    color = "orange"
+  ) +
+  scale_y_continuous(
+    limits = c(0, .5),
+    breaks = seq(0, .5, by = .05)
+  ) +
+  labs(
+    title = "WI scores consistently float around 0.25",
+    subtitle = "Source: Chicago Council on Global Affairs Survey",
+    x = NULL,
+    y = "WI score (0-1)",
+    caption = logo
+  )
+saveit(4, 5, 7)
+```
+
+```{r}
+library(estimatr)
+lm_robust(
+  wi ~ Male + Republican + Independent + College + White + Age,
+  data = dt |> filter(year == 2024),
+  weights = weights,
+  se_type = "HC1"
+) |>
+  tidy() |>
+  mutate(ord = 1:n()) |>
+  filter(term != "(Intercept)") |>
+  ggplot() +
+  aes(estimate, reorder(term, ord), xmin = conf.low, xmax = conf.high) +
+  geom_pointrange() +
+  geom_vline(xintercept = 0, lty = 2) +
+  labs(
+    title = "Predictors of WI scores in 2024",
+    subtitle = "OLS estimates with robust 95% confidence intervals",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(5, 5, 7)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+library(ggeffects)
+lm_robust(
+  wi ~ Male + Republican * White + Independent + College + Age,
+  data = dt |> filter(year == 2024),
+  weights = weights,
+  se_type = "HC1"
+) |>
+  ggpredict(c("Republican", "White"), 0.84) |>
+  as_tibble() |>
+  mutate(
+    x = ifelse(x == 0, "Democrat", "Republican"),
+    group = ifelse(group == 0, "Non-white", "White")
+  ) |>
+  ggplot() +
+  aes(x, predicted, ymin = conf.low, ymax = conf.high) +
+  geom_pointrange(
+    aes(color = group),
+    position = position_dodge(.1)
+  ) +
+  ggpal("binary") +
+  labs(
+    title = "White = a lower WI score only for Democrats",
+    subtitle = "Predictions from model with White status interacted with\nRepublican ID",
+    x = NULL,
+    y = "WI score\n(84% CIs)",
+    color = NULL,
+    caption = logo
+  )
+saveit(6, 5, 7)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+library(ggeffects)
+lm_robust(
+  wi ~ Male * Republican + White + Independent + College + Age,
+  data = dt |> filter(year == 2024),
+  weights = weights,
+  se_type = "HC1"
+) |>
+  ggpredict(c("Republican", "Male"), 0.84) |>
+  as_tibble() |>
+  mutate(
+    x = ifelse(x == 0, "Democrat", "Republican"),
+    group = ifelse(group == 0, "Female", "Male")
+  ) |>
+  ggplot() +
+  aes(x, predicted, ymin = conf.low, ymax = conf.high) +
+  geom_pointrange(
+    aes(color = group),
+    position = position_dodge(.1)
+  ) +
+  ggpal("binary") +
+  labs(
+    title = "Male = a lower WI score only for Democrats",
+    subtitle = "Predictions from model with Gender interacted with\nRepublican ID",
+    x = NULL,
+    y = "WI score\n(84% CIs)",
+    color = NULL,
+    caption = logo
+  )
+saveit(7, 5, 7)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+library(ggeffects)
+lm_robust(
+  wi ~ Male + Republican * Age + College + White + Independent + Age,
+  data = dt |> filter(year == 2024),
+  weights = weights,
+  se_type = "HC1"
+) |>
+  ggpredict(c("Republican", "Male"), 0.84) |>
+  as_tibble() |>
+  mutate(
+    x = ifelse(x == 0, "Democrat", "Republican"),
+    group = ifelse(group == 0, "Female", "Male")
+  ) |>
+  ggplot() +
+  aes(x, predicted, ymin = conf.low, ymax = conf.high) +
+  geom_pointrange(
+    aes(color = group),
+    position = position_dodge(.1)
+  ) +
+  ggpal("binary") +
+  labs(
+    title = "Male = a lower WI score only for Democrats",
+    subtitle = "Predictions from model with Gender interacted with\nRepublican ID",
+    x = NULL,
+    y = "WI score",
+    color = NULL,
+    caption = logo
+  )
+saveit(8, 5, 7)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+sort(unique(dt$year)) |>
+  map_dfr(
+    ~ lm_robust(
+        wi ~ Male + Republican + Independent + College + White + Age,
+        data = dt |> filter(year == .x) |>
+          mutate(
+            Republican = ifelse(year == 1994, 0, Republican),
+            Independent = ifelse(year == 1994, 0, Independent)
+          ),
+        weights = weights,
+        se_type = "HC1"
+      ) |>
+        tidy() |>
+        mutate(Year = .x)
+  ) -> results
+
+results |>
+  filter(term != "(Intercept)") |>
+  mutate(
+    term = factor(1:n(), labels = term)
+  ) |>
+  ggplot() +
+  aes(Year, estimate, ymin = conf.low, ymax = conf.high) +
+  geom_pointrange(size = .1) +
+  geom_hline(yintercept = 0, lty = 2) +
+  facet_wrap(~ term) +
+  scale_x_continuous(
+    breaks = c(1980, 1995, 2010, 2025)
+  ) +
+  labs(
+    title = "Differentiation in WI scores starts post 2010",
+    subtitle = "OLS estimates by survey year",
+    x = NULL,
+    y = "Estimate\n(95% CIs)",
+    caption = logo
+  )
+saveit(9, 5, 7)
+```
+
