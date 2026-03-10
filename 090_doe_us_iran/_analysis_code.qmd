@@ -1,0 +1,255 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(here)
+library(countrycode)
+set_palette(
+  qualitative = c(
+    "orange3",
+    "steelblue",
+    "navy",
+    "red3",
+    "gray"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "090_doe_us_iran",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+read_csv(
+  "~/Denison University/Teaching/teaching-r-proj/Teaching/DPR 390/Spring 2026/data/doe-dir-dyad-2.0.csv"
+) -> dt
+dt |>
+  rename(
+    ccode1 = ccode_a,
+    ccode2 = ccode_b
+  ) -> dt
+```
+
+Bring in some macro data
+
+```{r}
+library(globalmacrodata)
+
+gmd(
+  version = "2026_01"
+) -> gm
+
+gm |>
+  transmute(
+    year = year,
+    ccode1 = countrycode(ISO3, "iso3c", "cown"),
+    gdp1 = rGDP_USD,
+    pop1 = pop
+  ) |>
+  drop_na() -> gm1
+gm1 |>
+  rename(
+    ccode2 = ccode1,
+    gdp2 = gdp1,
+    pop2 = pop1
+  ) -> gm2
+
+dt |>
+  left_join(gm1) |>
+  left_join(gm2) -> dt
+```
+
+## Figures
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+dt |>
+  filter(
+    ccode1 == 2,
+    ccode2 == 630
+  ) |>
+  pivot_longer(
+    pr_win_a:pr_win_b
+  ) |>
+  mutate(
+    name = rep(
+      c("US wins", "It's statelmate", "Iran Wins"),
+      len = n()
+    )
+  ) |>
+  ggplot() +
+  aes(year, value, color = name, linetype = name) +
+  geom_line(linewidth = .75) +
+  labs(
+    title = "Stalemate between US and Iran is likely",
+    subtitle = "DOE scores for a US-initated conflict with Iran, 1816-2012",
+    x = NULL,
+    y = "% Chance",
+    caption = logo,
+    color = "Probability that:",
+    linetype = "Probability that:"
+  ) +
+  ggpal() +
+  scale_y_continuous(
+    limits = 0:1,
+    labels = scales::percent
+  )
+saveit(1, 5, 7)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+dt |>
+  pivot_longer(
+    pr_win_a:pr_win_b
+  ) |>
+  mutate(
+    name = rep(
+      c("Initiator wins", "It's stalemate", "Target Wins"),
+      len = n()
+    )
+  ) |>
+  group_by(year, name) |>
+  mean_ci(value) |>
+  ggplot() +
+  aes(year, mean, color = name, linetype = name) +
+  geom_line(linewidth = .75) +
+  labs(
+    title = "Stalemate is also likely globally",
+    subtitle = "Yearly mean DOE scores for initiators versus targets, 1816-2012",
+    x = NULL,
+    y = "% Chance",
+    caption = logo,
+    color = "Probability that:",
+    linetype = "Probability that:"
+  ) +
+  scale_y_continuous(
+    limits = 0:1,
+    labels = scales::percent
+  ) +
+  ggpal()
+saveit(2, 5, 7)
+```
+
+
+```{r}
+rhs <- ~ log(gdp1 / gdp2) + log(pop1 / pop2)
+forms <- list(
+  update(rhs, pr_win_a ~ .),
+  update(rhs, pr_stalemate ~ .),
+  update(rhs, pr_win_b ~ .)
+)
+fits <- map(forms, ~ glm(.x, data = dt |> filter(year > 1950), family = quasibinomial))
+fits |>
+  map(summary)
+```
+
+```{r}
+bind_cols(
+  gm1 |>
+    filter(ccode1 == 2, year == 2026) |>
+    select(3:4),
+  gm2 |>
+    filter(ccode2 == 630, year == 2026) |>
+    select(3:4)
+) -> nd
+
+logit <- function(x) 1 / (1 + exp(-x))
+
+fits |>
+  map_dfr(
+    ~ {
+      nd |>
+        mutate(
+          prob = predict(.x, nd) |> logit()
+        )
+    }
+  ) -> out
+
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+d2012 <- dt |>
+  filter(year == 2012) |>
+  filter(ccode1 == 2, ccode2 == 630)
+out |>
+  mutate(
+    prob2012 = c(d2012$pr_win_a, 
+                 d2012$pr_stalemate, d2012$pr_win_b)
+  ) |>
+  pivot_longer(
+    prob:prob2012
+  ) |>
+  mutate(
+    name = ifelse(name == "prob", "2026\n(prediction)", "2012\n(actual)"),
+    prob = rep(
+      c("US wins", "It's stalemate", "Iran wins"),
+      each = 2
+    )
+  ) |>
+  group_by(name) |>
+  mutate(
+    cum = cumsum(value) - value / 2
+  ) |>
+  ggplot() +
+  aes(value, name, fill = prob) +
+  geom_col(
+    width = .5
+  ) +
+  geom_text(
+    aes(label = scales::percent(value),
+        x = cum,
+        color = prob),
+    vjust = -5,
+    show.legend = F,
+    fontface = "bold"
+  ) +
+  ggpal(aes = "fill", guide = guide_legend(reverse = T)) +
+  ggpal() +
+  labs(
+    title = "9 times out of 10, the result is stalemate",
+    subtitle = "2012 (actual) and 2026 (predicted) DOE scores",
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    fill = "Probability that:"
+  ) +
+  scale_x_continuous(
+    breaks = NULL
+  ) +
+  theme(
+    panel.grid.major = element_blank(),
+    axis.text.y = element_text(hjust = .5)
+  )
+saveit(3, 5, 7)
+```
+
