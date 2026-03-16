@@ -1,0 +1,271 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(here)
+library(countrycode)
+library(patchwork)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "091_du_2026",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(googlesheets4)
+gs4_deauth()
+m26 <- range_speedread("https://docs.google.com/spreadsheets/d/1kyWcrjy73xys1aSlart7njz37WL0BrdLX6tdVin-Nx0/edit?usp=sharing")
+m26 <- m26 |> rename_all(tolower) |> 
+  filter(finished==1)
+```
+
+Get the FP questions:
+
+```{r}
+m26 |>
+  transmute(
+    ## First the FP questions
+    across(
+      starts_with("q22_"),
+      ~ frcode(
+        .x == 3 ~ "Not at all",
+        .x == 2 ~ "Somewhat",
+        .x == 1 ~ "Very"
+      )
+    ),
+    across(
+      c(q23_1, q23_3:q23_4, q23_6),
+      ~ frcode(
+        .x == 1 ~ "Cut back",
+        .x == 2 ~ "Keep the same",
+        .x == 3 ~ "Expand"
+      )
+    ),
+    
+    ## Second get partisanship
+    party = frcode(
+      q3 %in% 1:3 ~ "Democrat",
+      q3 == 4 ~ "Independent",
+      q3 %in% 5:7 ~ "Republican"
+    )
+  ) -> dt
+```
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  pivot_longer(
+    starts_with("q22")
+  ) |>
+  group_by(name) |>
+  ct(value, show_na = F) |>
+  ungroup() |>
+  mutate(
+    name = rep(
+      c(
+        "strengthen the UN",
+        "protect weaker nations",
+        "promote human rights",
+        "protect US jobs",
+        "protect democracy worldwide"
+      ),
+      each = 3
+    )
+  ) |>
+  ggplot() +
+  aes(pct, name, fill = value) +
+  geom_col(color = "black") +
+  ggpal(
+    "sequential", "fill", ordinal = T, 
+    levels = 3, 
+    guide = guide_legend(reverse = T)
+  ) +
+  labs(
+    title = "Most Denisonians want an involved US",
+    subtitle = "How important should it be for US foreign policy to...",
+    fill = NULL,
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    labels = scales::percent
+  ) +
+  theme(
+    panel.grid.major.y = element_blank()
+  )
+saveit(1, 5, 7)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  pivot_longer(
+    starts_with("q23")
+  ) |>
+  group_by(name) |>
+  ct(value, show_na = F) |>
+  ungroup() |>
+  mutate(
+    name = rep(
+      c(
+        "defense spending",
+        "US military aid abroad",
+        "US economic aid abroad",
+        "immigration enforcement"
+      ),
+      each = 3
+    )
+  ) |>
+  ggplot() +
+  aes(pct, name, fill = value) +
+  geom_col(color = "black") +
+  ggpal(
+    "sequential", "fill", ordinal = T, 
+    levels = 3, 
+    guide = guide_legend(reverse = T)
+  ) +
+  labs(
+    title = "Most Denisonians want a less aggressive US",
+    subtitle = "What changes, if any, should be made to...",
+    fill = NULL,
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    labels = scales::percent
+  ) +
+  theme(
+    panel.grid.major.y = element_blank()
+  )
+saveit(2, 5, 7)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  pivot_longer(
+    starts_with("q22")
+  ) |>
+  mutate(
+    value = (value == "Not at all") + 0
+  ) |>
+  group_by(name, party) |>
+  mean_ci(value, ci = .84) |>
+  drop_na() |>
+  mutate(
+    name = rep(
+        c(
+        "strengthen the UN",
+        "protect weaker nations",
+        "promote human rights",
+        "protect US jobs",
+        "protect democracy worldwide"
+      ),
+      each = 3
+    )
+  ) |>
+  ggplot() +
+  aes(mean, name, xmin = lower, xmax = upper, color = party) +
+  geom_pointrange(
+    position = position_dodge(-.3)
+  ) +
+  ggpal() +
+  labs(
+    title = "Dems and Reps don't agree on priorities",
+    subtitle = "% saying it's not at all important for US foreign policy to...",
+    x = NULL,
+    y = NULL,
+    color = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    labels = scales::percent
+  )
+saveit(3, 5, 7)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  pivot_longer(
+    starts_with("q23")
+  ) |>
+  mutate(
+    value = (value == "Cut back") + 0
+  ) |>
+  group_by(name, party) |>
+  mean_ci(value, ci = .84) |>
+  drop_na() |>
+  mutate(
+    name = rep(
+        c(
+        "defense spending",
+        "US military aid abroad",
+        "US economic aid abroad",
+        "immigration enforcement"
+      ),
+      each = 3
+    )
+  ) |>
+  ggplot() +
+  aes(mean, name, xmin = lower, xmax = upper, color = party) +
+  geom_pointrange(
+    position = position_dodge(-.3)
+  ) +
+  ggpal() +
+  labs(
+    title = "Dems and Reps don't agree on priorities",
+    subtitle = "% saying the US should cut back on...",
+    x = NULL,
+    y = NULL,
+    color = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    labels = scales::percent
+  )
+saveit(4, 5, 7)
+```
