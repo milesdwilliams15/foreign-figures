@@ -1,0 +1,218 @@
+---
+title: "A world at war"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(here)
+library(countrycode)
+library(patchwork)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "orange3",
+    "navy",
+    "red3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "092_world_at_war",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(peacesciencer)
+source(
+  "https://raw.githubusercontent.com/milesdwilliams15/death-destruction-data/refs/heads/main/helpers/peacesciencer_extras.R"
+)
+
+create_stateyears(
+  subset_years = 1816:2014
+) |>
+  add_icd_mics(level = 4) |>
+  add_cow_majors() -> dt
+
+dt |>
+  filter(year == 2014)
+```
+
+## Figures
+
+```{r}
+dt |>
+  group_by(year) |>
+  summarize(
+    majorwars = sum(micongoing[cowmaj == 1]),
+    allwars = sum(micongoing),
+    majorfat = sum(fatalmax[cowmaj == 1]),
+    allfat = sum(fatalmax)
+  ) |>
+  pivot_longer(-year) |>
+  mutate(
+    name = rep(
+      c("Majors at War", "All at War", "Major Fatalities", "All Fatalities"),
+      len = n()
+    ),
+    ord = rep(1:4, len = n()),
+    name = factor(as.factor(ord), labels = name[1:4])
+  ) |>
+  ggplot() +
+  aes(year, value, color = name) +
+  geom_line(
+    linewidth = .75,
+    show.legend = F
+  ) +
+  facet_wrap(~ name, scales = "free_y") +
+  ggpal()
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  filter(cowmaj == 1) |>
+  group_by(year) |>
+  summarize(
+    mean = sum(micongoing)
+  ) |>
+  ggplot() +
+  aes(year, mean) +
+  geom_line(
+    linewidth = .75,
+    color = "gray"
+  ) +
+  geom_smooth(
+    method = "gam",
+    se = F,
+    color = "navy"
+  ) +
+  labs(
+    title = "Major Powers Are Always Fighting",
+    subtitle = "Major powers involved in ongoing use of force or war\n(MIE dataset version 1.0, 1816-2014)",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(1, 5, 7)
+```
+
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  filter(cowmaj == 1) |>
+  group_by(year) |>
+  summarize(
+    mean = sum(micongoing[fatalmax_total > 0])
+  ) |>
+  ggplot() +
+  aes(year, mean) +
+  geom_line(
+    linewidth = .75,
+    color = "gray"
+  ) +
+  geom_smooth(
+    method = "gam",
+    se = F,
+    color = "navy"
+  ) +
+  labs(
+    title = "Deadly Major Power Conflicts Trending Down",
+    subtitle = "Major powers involved in deadly ongoing use of force or war\n(MIE dataset version 1.0, 1816-2014)",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(2, 5, 7)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  filter(cowmaj == 1) |>
+  group_by(year) |>
+  summarize(
+    mean = sum(miconset_init)
+  ) |>
+  ggplot() +
+  aes(year, mean) +
+  geom_line(
+    linewidth = .75,
+    color = "gray"
+  ) +
+  geom_smooth(
+    method = "gam",
+    se = F,
+    color = "navy"
+  ) +
+  labs(
+    title = "Major Powers Are Always Starting Fights",
+    subtitle = "Major powers initiations of use of force or war\n(MIE dataset version 1.0, 1816-2014)",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(3, 5, 7)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  filter(cowmaj == 1) |>
+  group_by(year) |>
+  summarize(
+    mean = sum(miconset_init[fatalmax_total > 0])
+  ) |>
+  ggplot() +
+  aes(year, mean) +
+  geom_line(
+    linewidth = .75,
+    color = "gray"
+  ) +
+  geom_smooth(
+    method = "gam",
+    se = F,
+    color = "navy"
+  ) +
+  labs(
+    title = "Deadly Major Power Initiations Trending Down",
+    subtitle = "Major powers initiations of deadly use of force or war\n(MIE dataset version 1.0, 1816-2014)",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(4, 5, 7)
+```
