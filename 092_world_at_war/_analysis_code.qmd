@@ -216,3 +216,44 @@ dt |>
   )
 saveit(4, 5, 7)
 ```
+
+
+```{r}
+create_stateyears(
+  subset_years = 1816:2014
+) |>
+  add_icd_mics(level = 5) |>
+  add_cow_majors() -> dt
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  filter(cowmaj == 1) |>
+  group_by(year) |>
+  summarize(
+    mean = sum(micongoing)
+  ) |>
+  ggplot() +
+  aes(year, mean) +
+  geom_line(
+    linewidth = .75,
+    color = "gray"
+  ) +
+  geom_smooth(
+    method = "gam",
+    se = F,
+    color = "navy"
+  ) +
+  labs(
+    title = "In only 1 year did 2 major powers start wars",
+    subtitle = "Major powers initiations of deadly use of force or war\n(MIE dataset version 1.0, 1816-2014)",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(5, 5, 7)
+```
