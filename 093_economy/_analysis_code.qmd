@@ -1,0 +1,179 @@
+---
+title: "State of Economy"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(here)
+library(countrycode)
+library(patchwork)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "orange3",
+    "navy",
+    "red3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "093_economy",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+read_csv(
+  here("_data", "gmd_2026_01.csv")
+) -> dt
+
+dt |>
+  filter(
+    year >= 2000, year < 2026
+  ) -> dt
+
+dt |>
+  janitor::clean_names() -> dt
+```
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+ggplot(dt) +
+  aes(year, r_gdp_usd) +
+  geom_line(
+    aes(group = countryname),
+    color = "gray",
+    linewidth = .1
+  ) +
+  geom_labelline(
+    data = . %>% filter(countryname == "United States"),
+    aes(label = "USA"),
+    linewidth = .75,
+    color = "navy",
+    text_smoothing = 50
+  ) +
+  geom_labelline(
+    data = . %>% filter(countryname == "China"),
+    aes(label = "China"),
+    linewidth = .75,
+    color = "orange",
+    text_smoothing = 50
+  ) +
+  scale_x_continuous(
+    breaks = seq(1900, 2030, by = 10)
+  ) +
+  scale_y_continuous(
+    labels = ~ scales::dollar(.x / 1e6)
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  labs(
+    title = "US still has a soaring GDP\n(China's Catching Up)",
+    subtitle = "Real GDP in trillions of 2015 USD, 2000-2025 (GMD, v2026_01)",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(1, 5, 7)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  filter(countryname == "United States") |>
+  mutate(
+    "(1) Total Trade (tril)" = (imports_usd + exports_usd) / 1e06,
+    "(2) Trade Balance (tril)" = (exports_usd - imports_usd) / 1e06,
+    "(3) Trade/GDP (%)" = imports_gdp + exports_gdp,
+    "(4) Balance/GDP (%)" = exports_gdp - imports_gdp
+  ) |>
+  pivot_longer(79:82) |>
+  ggplot() +
+  aes(year, value) +
+  facet_wrap(~ name, scales = "free_y") +
+  geom_line() +
+  labs(
+    title = "Trade balance and total trade didn't improve",
+    subtitle = "Values for the US, 2000-2025 (GMD, v2026_01)",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(2, 5, 7)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  filter(countryname == "United States") |>
+  mutate(
+    "(1) Revenue" = govrev_gdp,
+    "(2) Spending" = govexp_gdp,
+    "(3) Debt" = govdebt_gdp,
+    "(4) Deficit" = govdef_gdp
+  ) |>
+  pivot_longer(79:82) |>
+  ggplot() +
+  aes(year, value) +
+  facet_wrap(~ name, scales = "free_y") +
+  geom_line() +
+  labs(
+    title = "US balance sheet didn't improve either",
+    subtitle = "Values in % per GDP for the US, 2000-2025 (GMD, v2026_01)",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(3, 5, 7)
+```
+
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  filter(countryname == "United States") |>
+  mutate(
+    growth = 100 * (r_gdp_usd - lag(r_gdp_usd, order_by = year)) / 
+      lag(r_gdp_usd, order_by = year)
+  ) |>
+  filter(year > 2020) |>
+  select(year, growth)
+```
+
+
+
+
