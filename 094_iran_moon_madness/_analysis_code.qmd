@@ -1,0 +1,299 @@
+---
+title: "Iran Moon Madness"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(here)
+library(countrycode)
+library(patchwork)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "orange3",
+    "navy",
+    "red3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "094_iran_moon_madness",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+## Data
+
+```{r}
+read_csv(
+  here("_data", "gt_iran_moon_madness.csv")
+) -> dt
+
+dt |>
+  janitor::clean_names() -> dt
+
+dt |>
+  mutate(
+    across(
+      2:5,
+      ~ as.numeric(.x) |>
+        replace_na(0)
+    )
+  ) -> dt
+```
+
+
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  filter(
+    time >= "2026-03-01"
+  ) |>
+  mutate(
+    artemis_ii = artemis_ii / max(artemis_ii) * 100
+  ) |>
+  ggplot() +
+  aes(time, artemis_ii) +
+  geom_line(
+    linewidth = 1,
+    color = "navy"
+  ) +
+  geom_textvline(
+    xintercept = as.Date("2026-04-01"),
+    label = "Launch",
+    hjust = .95,
+    vjust = -.5,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  geom_textvline(
+    xintercept = as.Date("2026-04-10"),
+    label = "Splash Down",
+    hjust = .95,
+    vjust = -.5,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  scale_y_continuous(
+    limits = c(0, 120),
+    breaks = seq(0, 100, by = 20)
+  ) +
+  labs(
+    title = "Interest in Artemis II Peaks on Lauch Day",
+    subtitle = "Source: Google Trends (accessed 04/14/2026)",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    panel.grid.major.x = element_blank()
+  ) 
+saveit(1, 5, 7)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  filter(
+    time >= "2026-03-01"
+  ) |>
+  mutate(
+    across(
+      c(2, 4),
+      ~ .x / max(march_madness) * 100
+    )
+  ) |>
+  ggplot() +
+  aes(time) +
+  geom_line(
+    aes(y = artemis_ii, color = "Artemis II"),
+    linewidth = 1
+  ) +
+  geom_line(
+    aes(y = march_madness, color = "March Madness"),
+    linewidth = 1
+  ) +
+  geom_textvline(
+    xintercept = as.Date("2026-04-01"),
+    label = "Launch",
+    hjust = .95,
+    vjust = -.5,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  geom_textvline(
+    xintercept = as.Date("2026-04-10"),
+    label = "Splash Down",
+    hjust = .95,
+    vjust = -.5,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  scale_y_continuous(
+    limits = c(0, 120),
+    breaks = seq(0, 100, by = 20)
+  ) +
+  labs(
+    title = "March Madness > Artemis II",
+    subtitle = "Source: Google Trends (accessed 04/14/2026)",
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = NULL
+  ) +
+  theme(
+    panel.grid.major.x = element_blank()
+  ) +
+  ggpal()
+saveit(2, 5, 7)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  mutate(
+    across(
+      2:4,
+      ~ .x / max(march_madness) * 100
+    )
+  ) |>
+  ggplot() +
+  aes(time) +
+  geom_line(
+    aes(y = artemis_ii, color = "Artemis II"),
+    linewidth = 1
+  ) +
+  geom_line(
+    aes(y = march_madness, color = "March Madness"),
+    linewidth = 1
+  ) +
+  geom_line(
+    aes(y = iran, color = "Iran"),
+    linewidth = 1
+  ) +
+  geom_textvline(
+    xintercept = as.Date("2026-04-01"),
+    label = "Launch",
+    hjust = .95,
+    vjust = -.5,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  geom_textvline(
+    xintercept = as.Date("2026-04-10"),
+    label = "Splash Down",
+    hjust = .95,
+    vjust = -.5,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  scale_y_continuous(
+    limits = c(0, 120),
+    breaks = seq(0, 100, by = 20)
+  ) +
+  labs(
+    title = "Iran = March Madness > Artemis II",
+    subtitle = "Source: Google Trends (accessed 04/14/2026)",
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = NULL
+  ) +
+  theme(
+    panel.grid.major.x = element_blank()
+  ) +
+  ggpal()
+saveit(3, 5, 7)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  mutate(
+    across(
+      2:5,
+      ~ .x / max(super_bowl) * 100
+    )
+  ) |>
+  ggplot() +
+  aes(time) +
+  geom_line(
+    aes(y = artemis_ii, color = "Artemis II"),
+    linewidth = 1
+  ) +
+  geom_line(
+    aes(y = march_madness, color = "March Madness"),
+    linewidth = 1
+  ) +
+  geom_line(
+    aes(y = iran, color = "Iran"),
+    linewidth = 1
+  ) +
+  geom_line(
+    aes(y = super_bowl, color = "Super Bowl"),
+    linewidth = 1
+  ) +
+  geom_textvline(
+    xintercept = as.Date("2026-04-01"),
+    label = "Launch",
+    hjust = .95,
+    vjust = -.5,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  geom_textvline(
+    xintercept = as.Date("2026-04-10"),
+    label = "Splash Down",
+    hjust = .95,
+    vjust = -.5,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  scale_y_continuous(
+    limits = c(0, 120),
+    breaks = seq(0, 100, by = 20)
+  ) +
+  labs(
+    title = "Super Bowl > Everything",
+    subtitle = "Source: Google Trends (accessed 04/14/2026)",
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = NULL
+  ) +
+  theme(
+    panel.grid.major.x = element_blank()
+  ) +
+  ggpal()
+saveit(4, 5, 7)
+```
+
