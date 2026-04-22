@@ -1,0 +1,671 @@
+---
+title: "UN Ideal Points 2025"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(here)
+library(countrycode)
+library(patchwork)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "orange3",
+    "navy",
+    "red3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "095_un_ideal",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+read_csv(
+  here("_data", "Idealpointestimates1946-2025.csv")
+) -> dt
+
+## order data
+source(
+  here("_helpers", "peacesciencer_extras.R")
+)
+library(peacesciencer)
+create_dyadyears(
+  subset_years = 1946:2025
+) |>
+  add_int_order() -> int_dt
+
+int_dt |>
+  mutate(ccode = ccode1) |>
+  group_by(ccode, year) |>
+  summarize(
+    wlo = any(
+      c1.PostWarLiberal == 1 |
+          c1.PostCWLiberal == 1
+      ) + 0,
+    com = any(
+      c1.PostWarCommunist == 1 |
+        c1.WarsawPact == 1
+      ) + 0
+  ) -> int_dt
+
+left_join(
+  dt, 
+  int_dt,
+  by = c("ccode", "year")
+) -> dt
+
+dt |>
+  mutate(
+    order = frcode(
+      wlo == 1 ~ "Liberal",
+      com == 1 ~ "Communist",
+      TRUE ~ "Outside"
+    )
+  ) -> dt
+
+dt |>
+  group_by(ccode) |>
+  mutate(
+    evercom = max(com, na.rm = T)
+  ) |>
+  ungroup() |>
+  mutate(
+    order2 = frcode(
+      wlo == 1 & evercom == 0 ~ "Liberal",
+      com == 1 ~ "Communist",
+      wlo == 1 & evercom == 1 ~ "Converts",
+      wlo == 0 & evercom == 1 & year > 1990 ~ "Legacy",
+      TRUE ~ "Other"
+    )
+  ) -> dt
+```
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+ggplot(dt) +
+  aes(year, IdealPointFP) +
+  geom_line(
+    aes(group = ccode),
+    color = "gray"
+  ) +
+  geom_line(
+    data = . %>% filter(ccode == 2),
+    aes(color = "United States"),
+    linewidth = 1
+  ) +
+  geom_smooth(
+    aes(color = "Global trend"),
+    se = F,
+    method = "gam"
+  ) +
+  ggpal() +
+  labs(
+    title = 
+      "As of 2025 the US aligned with Liberal Order\npolicies",
+    subtitle = 
+      "UN ideal points, 1946-2025 (Bailey, Strezhnev, Voeten 2017)",
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = NULL
+  ) +
+  scale_x_continuous(
+    breaks = seq(1950, 2020, by = 10)
+  ) +
+  theme(
+    axis.text.x = element_text(
+      angle = 45, hjust = 1
+    )
+  )
+saveit(1, 5, 7)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+ggplot(dt) +
+  aes(year, IdealPointFP) +
+  geom_line(
+    aes(group = ccode),
+    color = "gray"
+  ) +
+  geom_line(
+    data = . %>% filter(order == "Liberal"),
+    aes(group = ccode, color = "Liberal Order")
+  ) +
+  geom_line(
+    data = . %>% filter(ccode == 2),
+    aes(color = "United States"),
+    linewidth = 1
+  ) +
+  geom_smooth(
+    data = . %>% filter(order == "Liberal"),
+    color = "navy",
+    se = F,
+    method = "gam"
+  ) +
+  ggpal() +
+  labs(
+    title = 
+      "As of 2025 the US aligned with Liberal Order\npolicies",
+    subtitle = 
+      "UN ideal points, 1946-2025 (Bailey, Strezhnev, Voeten 2017)",
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = NULL
+  ) +
+  scale_x_continuous(
+    breaks = seq(1950, 2020, by = 10)
+  ) +
+  theme(
+    axis.text.x = element_text(
+      angle = 45, hjust = 1
+    )
+  )
+saveit(2, 5, 7)
+```
+
+```{r}
+dt |>
+  filter(year == 2025) |>
+  arrange(-IdealPointFP)
+```
+
+```{r}
+create_dyadyears(
+  subset_years = 1946:2025
+) |>
+  left_join(
+    dt |>
+      transmute(ccode1 = ccode, year, idp1 = IdealPointFP)
+  ) |>
+  left_join(
+    dt |>
+      transmute(ccode2 = ccode, year, idp2 = IdealPointFP)
+  ) -> ddt
+
+ddt |>
+  mutate(
+    sim = abs(idp1 - idp2)
+  ) |>
+  group_by(ccode1, year) |>
+  summarize(
+    sim = mean(sim, na.rm = T)
+  ) |>
+  rename(ccode = ccode1) -> simdt
+
+dt |>
+  left_join(simdt) -> dt 
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+ggplot(dt) +
+  aes(year, sim) +
+  geom_line(
+    aes(group = ccode),
+    color = "gray"
+  ) +
+  geom_line(
+    data = . %>% filter(ccode == 2),
+    aes(color = "United States"),
+    linewidth = 1
+  ) +
+  geom_smooth(
+    aes(color = "Global trend"),
+    se = F,
+    method = "gam"
+  ) +
+  ggpal() +
+  labs(
+    title = 
+      "As of 2025 the US aligned with Liberal Order\npolicies",
+    subtitle = 
+      "UN ideal points, 1946-2025 (Bailey, Strezhnev, Voeten 2017)",
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = NULL
+  ) +
+  scale_x_continuous(
+    breaks = seq(1950, 2020, by = 10)
+  ) +
+  theme(
+    axis.text.x = element_text(
+      angle = 45, hjust = 1
+    )
+  )
+saveit(3, 5, 7)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+source(here("_helpers", "my_mean_ci.R"))
+
+dt |>
+  filter(evercom == 1) |>
+  group_by(year) |>
+  mutate(
+    rus = IdealPointFP[ccode == 365],
+    adiff = abs(IdealPointFP - rus)
+  ) |>
+  filter(ccode != 365) |>
+  summarize(
+    my_mean_ci(adiff, ci = .95)
+  ) |>
+  ggplot() +
+  aes(year, y, ymin = ymin, ymax = ymax) +
+  geom_line(
+    linewidth = 1
+  ) +
+  geom_ribbon(
+    alpha = .2
+  ) +
+  geom_texthline(
+    yintercept = 0,
+    linetype = 2,
+    color = "red3",
+    label = "No Difference",
+    hjust = 0.1,
+    vjust = 1.1,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  geom_textvline(
+    xintercept = 1991,
+    label = "Collapse",
+    hjust = .9,
+    vjust = 1.1,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  labs(
+    title = "Divergence Happens Durring Collapse",
+    subtitle = "Avg. difference between Communist Order countries and USSR/Russia\nbefore and after the collapse of the order and the USSR (1946-2025)",
+    x = NULL,
+    y = "Ideal Point Difference",
+    caption = logo
+  )
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+library(estimatr)
+dt |>
+  filter(evercom == 1) |>
+  group_by(year) |>
+  mutate(
+    rus = IdealPointFP[ccode == 365],
+    adiff = abs(IdealPointFP - rus)
+  ) |>
+  filter(ccode != 365) |>
+  summarize(
+    y = mean(adiff, na.rm = T)
+  ) |>
+  ungroup() |>
+  mutate(
+    ylag = lag(y, order_by = year)
+  ) |> drop_na() -> rusdt
+
+rusfit <- lm(
+  y ~ ylag,
+  data = rusdt |> filter(year < 1990)
+)
+rushat0 <- rusdt |> filter(year < 1990) 
+rushat0$yhat <- predict(rusfit, rushat0)
+rushat1 <- rusdt |> filter(year >= 1990)
+rushat1$yhat <- 0
+for(i in 1:nrow(rushat1)) {
+  rushat1$yhat[i] <- predict(
+    rusfit, tibble(
+      ylag = ifelse(i == 1, 
+                    rushat1$ylag[i],
+                    rushat1$yhat[i-1]) 
+    )
+  )
+}
+
+bind_rows(
+  rushat0,
+  rushat1
+) |>
+  filter(year < 1994) |>
+  ggplot() +
+  aes(year) +
+  geom_line(
+    aes(y = y, linetype = "Observed")
+  ) +
+  geom_line(
+    aes(y = yhat, linetype = "Predicted")
+  ) +
+  geom_textvline(
+    xintercept = 1991,
+    label = "Collapse",
+    linetype = 3,
+    color = "red3",
+    family = "mono",
+    fontface = "bold",
+    vjust = 1.1
+  ) +
+  labs(
+    title = "The Soviet Order Collapse",
+    subtitle = "Observed and predicted ideological distance between USSR/Russia\nand subordinates, 1947-1999",
+    x = NULL,
+    y = NULL,
+    linetype = NULL,
+    caption = logo
+  )
+saveit(1, 5, 7)
+```
+
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  filter(wlo == 1) |>
+  group_by(year) |>
+  mutate(
+    usa = IdealPointFP[ccode == 2],
+    adiff = abs(IdealPointFP - usa)
+  ) |>
+  filter(ccode != 2) |>
+  summarize(
+    my_mean_ci(adiff, ci = .95)
+  ) |>
+  ggplot() +
+  aes(year, y, ymin = ymin, ymax = ymax) +
+  geom_line(
+    linewidth = 1
+  ) +
+  geom_ribbon(
+    alpha = .2
+  ) +
+  geom_texthline(
+    yintercept = 0,
+    linetype = 2,
+    color = "red3",
+    label = "No Difference",
+    hjust = 0.5,
+    vjust = 1.1,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  geom_textvline(
+    xintercept = 2025,
+    label = "Collapse??",
+    hjust = .99,
+    vjust = 1.1,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  labs(
+    title = "Slow Drift then Sudden Break",
+    subtitle = "Avg. difference between Liberal Order countries and USA\nbefore and up to the collapse (?) of the order (1946-2025)",
+    x = NULL,
+    y = "Ideal Point Difference",
+    caption = logo
+  )
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+library(estimatr)
+dt |>
+  filter(wlo == 1) |>
+  group_by(year) |>
+  mutate(
+    usa = IdealPointFP[ccode == 2],
+    adiff = abs(IdealPointFP - usa)
+  ) |>
+  filter(ccode != 2) |>
+  summarize(
+    y = mean(adiff, na.rm = T)
+  ) |>
+  ungroup() |>
+  mutate(
+    ylag = lag(y, order_by = year)
+  ) |> drop_na() -> usadt
+
+usafit <- lm(
+  y ~ ylag,
+  data = usadt |> filter(year < 2025)
+)
+usadt$yhat <- predict(usafit, usadt)
+
+usadt |>
+  filter(year > 1999) |>
+  ggplot() +
+  aes(year) +
+  geom_line(
+    aes(y = y, linetype = "Observed")
+  ) +
+  geom_line(
+    aes(y = yhat, linetype = "Predicted")
+  ) +
+  geom_textvline(
+    xintercept = 2025,
+    label = "Collapse??",
+    linetype = 3,
+    color = "red3",
+    family = "mono",
+    fontface = "bold",
+    vjust = 1.1
+  ) +
+  labs(
+    title = "Same Pattern for Liberal Order in 2025",
+    subtitle = "Observed and predicted ideological distance between USA\nand subordinates, 2000-2025",
+    x = NULL,
+    y = NULL,
+    linetype = NULL,
+    caption = logo
+  )
+saveit(2, 5, 7)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  group_by(year) |>
+  summarize(
+    rus  = IdealPointFP[ccode == 365],
+    mean = mean(IdealPointFP[ccode != 365 & evercom == 1], na.rm = T),
+    se   = sd(IdealPointFP[ccode != 365 & evercom == 1], T) /
+      sqrt(sum(!is.na(IdealPointFP[ccode != 365 & evercom == 1])))
+  ) |>
+  ggplot() +
+  aes(year) +
+  geom_line(
+    aes(y = mean, color = "Communist Order"),
+    linewidth = 1
+  ) +
+  geom_ribbon(
+    aes(ymin = mean - 1.96 * se, ymax =  mean + 1.96 * se),
+    alpha = .2
+  ) +
+  geom_line(
+    aes(y = rus, color = "USSR/Russia"),
+    linewidth = 1
+  ) +
+  ggpal() +
+  labs(
+    title = "Drifting Apart, Together",
+    subtitle = "Raw ideal points for USSR/Russia vs other communist states",
+    x = NULL,
+    y = "Ideal Point",
+    caption = logo,
+    color = NULL
+  )
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+dt |>
+  group_by(year) |>
+  summarize(
+    usa  = IdealPointFP[ccode == 2],
+    mean = mean(IdealPointFP[ccode != 2 & wlo == 1], na.rm = T),
+    se   = sd(IdealPointFP[ccode != 2 & wlo == 1], T) /
+      sqrt(sum(!is.na(IdealPointFP[ccode != 2 & wlo == 1])))
+  ) |>
+  ggplot() +
+  aes(year) +
+  geom_line(
+    aes(y = mean, color = "Liberal Order"),
+    linewidth = 1
+  ) +
+  geom_ribbon(
+    aes(ymin = mean - 1.96 * se, ymax =  mean + 1.96 * se),
+    alpha = .2
+  ) +
+  geom_line(
+    aes(y = usa, color = "USA"),
+    linewidth = 1
+  ) +
+  ggpal() +
+  labs(
+    title = "Drifting Apart, Apart",
+    subtitle = "Raw ideal points for USA vs other liberal states",
+    x = NULL,
+    y = "Ideal Point",
+    caption = logo,
+    color = NULL
+  )
+```
+
+```{r}
+dt |>
+  filter(evercom == 1) |>
+  group_by(year) |>
+  mutate(
+    rus = IdealPointFP[ccode == 365],
+    adiff = abs(IdealPointFP - rus)
+  ) |>
+  filter(ccode != 365) |>
+  group_by(ccode) |>
+  mutate(
+    adiff = abs(adiff - lag(adiff, order_by = year))
+  ) |>
+  drop_na() |>
+  group_by(year) |>
+  summarize(
+    my_mean_ci(adiff, ci = .95)
+  ) |>
+  ggplot() +
+  aes(year, y, ymin = ymin, ymax = ymax) +
+  geom_line(
+    linewidth = 1
+  ) +
+  geom_ribbon(
+    alpha = .2
+  ) +
+  geom_hline(
+    yintercept = 0,
+    linetype = 2,
+    color = "red3"
+  ) +
+  geom_textvline(
+    xintercept = 1992,
+    label = "Collapse",
+    hjust = .9,
+    vjust = 1.1,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  labs(
+    title = "Biggest Divide Happens Durring Collapse",
+    subtitle = "Avg. difference between Communist Order countries and USSR/Russia\nbefore and after the collapse of the order and the USSR (1946-2025)",
+    x = NULL,
+    y = "Ideal Point Difference",
+    caption = logo
+  )
+```
+
+```{r}
+dt |>
+  filter(wlo == 1) |>
+  group_by(year) |>
+  mutate(
+    usa = IdealPointFP[ccode == 2],
+    adiff = abs(IdealPointFP - usa)
+  ) |>
+  filter(ccode != 2) |>
+  group_by(ccode) |>
+  mutate(
+    adiff = abs(adiff - lag(adiff, order_by = year))
+  ) |>
+  drop_na() |>
+  group_by(year) |>
+  summarize(
+    my_mean_ci(adiff, ci = .95)
+  ) |>
+  ggplot() +
+  aes(year, y, ymin = ymin, ymax = ymax) +
+  geom_line(
+    linewidth = 1
+  ) +
+  geom_ribbon(
+    alpha = .2
+  ) +
+  geom_hline(
+    yintercept = 0,
+    linetype = 2,
+    color = "red3"
+  ) +
+  geom_textvline(
+    xintercept = 1992,
+    label = "Collapse",
+    hjust = .9,
+    vjust = 1.1,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  labs(
+    title = "Biggest Divide Happens Durring Collapse",
+    subtitle = "Avg. difference between Communist Order countries and USSR/Russia\nbefore and after the collapse of the order and the USSR (1946-2025)",
+    x = NULL,
+    y = "Ideal Point Difference",
+    caption = logo
+  )
+```
+
