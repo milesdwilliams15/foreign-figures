@@ -1,0 +1,165 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(here)
+library(countrycode)
+library(patchwork)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "orange",
+    "navy",
+    "red",
+    "green3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "096_bet_on_ir",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+Need to install the polymarketR package:
+
+```{r}
+# Install polymarketR from GitHub
+# devtools::install_github("clintmckenna/polymarketR")
+```
+
+Now can I use it?
+
+```{r}
+library(polymarketR)
+
+# event slug for US-Iran peace deal
+event_slug <- "us-x-iran-permanent-peace-deal-by"
+event <- get_event_by_slug(event_slug)
+
+# all markets for event
+markets <- get_event_markets(event_slug)
+
+# price history
+history <- get_event_prices_history(event_slug, interval = "max", fidelity = 60)
+history <- history |>
+  left_join(
+    markets |>
+      transmute(
+        market_id = id,
+        volume
+      )
+  ) |>
+  filter(outcome == "Yes")
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+history |>
+  mutate(
+    item = paste(groupItemTitle, "2026") |> 
+      mdy(),
+    item = fct_reorder(groupItemTitle, item)
+  ) |> filter(datetime == max(datetime))
+  ggplot() +
+  aes(datetime, 100 * price, color = item) +
+  geom_line() +
+  ggpal() +
+  labs(
+    title = "Betting on Peace Later Not Sooner",
+    subtitle = "Prices (Probabilities) for a Peace Deal by a Certain Date",
+    color = "Peace by:",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = scales::label_currency(
+      suffix = "\u00A2",
+      prefix = ""
+    ),
+    breaks = seq(0, 100, by = 10)
+  )
+saveit(1, 5, 7)
+```
+
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+history |>
+  distinct(groupItemTitle, volume) |>
+  mutate(
+    ord = mdy(paste(groupItemTitle, "2026")),
+    volume = as.numeric(volume)
+  ) |>
+  ggplot() +
+  aes(reorder(groupItemTitle, ord), volume) +
+  geom_col(
+    aes(fill = "By Market")
+  ) +
+  geom_text(
+    aes(color = "Total", label = scales::dollar(volume / 1e06)),
+    vjust = 1.1,
+    fontface = "bold"
+  ) +
+  geom_col(
+    data = . %>%
+      summarize(groupItemTitle = "Total", volume = sum(volume), ord = 10),
+    aes(fill = "Total")
+  ) +
+  geom_text(
+    data = . %>%
+      summarize(groupItemTitle = "Total", volume = sum(volume), ord = 0),
+    aes(color = "By Market", label = scales::dollar(volume / 1e06)),
+    vjust = 1.2,
+    fontface = "bold"
+  ) +
+  ggpal("binary", "fill") +
+  ggpal("binary", "color") +
+  theme(
+    legend.position = "",
+    panel.grid.major = element_blank()
+  ) +
+  scale_y_continuous(
+    breaks = NULL
+  ) +
+  labs(
+    title = "Tens of Millions Riding on US-Iran Peace Deal",
+    subtitle = "Volume of Bids in Millions of $ by Deal Date",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(2, 5, 7)
+```
