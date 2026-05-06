@@ -1,0 +1,177 @@
+---
+title: "Students, teaching, and AI"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(here)
+library(countrycode)
+library(patchwork)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "097_teaching_ai",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(googlesheets4)
+gs4_deauth()
+m26 <- range_speedread("https://docs.google.com/spreadsheets/d/1kyWcrjy73xys1aSlart7njz37WL0BrdLX6tdVin-Nx0/edit?usp=sharing")
+m26 <- m26 |> rename_all(tolower) |> 
+  filter(finished==1)
+```
+
+Get the FP questions:
+
+```{r}
+m26 |>
+  transmute(
+    # familiar with AI == 1
+    ai_fam = (q27 %in% 1:2) + 0,
+    # used AI == 1
+    ai_use = ifelse(
+        if_all(
+          q28_1:q28_6, is.na
+      ), 0, 1
+    ),
+    ## used AI for coding, writing, or summarizing?
+    ai_code = ifelse(is.na(q28_5), 0, 1),
+    ai_write = ifelse(is.na(q28_3), 0, 1),
+    ai_sum = ifelse(is.na(q28_2), 0, 1),
+    ai_other = ifelse(
+      ai_use == 1 & 
+        (ai_code + ai_write + ai_sum) == 0,
+      1, 0
+    ),
+    
+    ## AI bad for education?
+    ai_bad = ifelse(
+      q29_2 %in% 1:2, 1, 0
+    )
+  ) -> dt
+```
+
+
+## Figures
+
+```{r}
+summary(dt)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  summarize(
+    across(everything(), ~ mean(.x, na.rm = T))
+  ) |>
+  pivot_longer(everything()) |>
+  mutate(
+    ord = n():1,
+    lab = c("Are familiar with AI", "Use AI for anything", "...for coding",
+            "...for writing", "...for summaries",
+            "...for something else", "Think AI undermines\neducation")
+  ) |>
+  ggplot() +
+  aes(
+    x = value,
+    y = reorder(lab, ord)
+  ) +
+  geom_col(
+    fill = "orange",
+    color = "black"
+  ) +
+  geom_text(
+    aes(label = scales::percent(value)),
+    color = "navy",
+    fontface = "bold",
+    hjust = 1.1
+  ) +
+  scale_x_continuous(
+    breaks = NULL
+  ) +
+  labs(
+    title = "Most Students Use AI",
+    subtitle = "% of students that:",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    panel.grid.major = element_blank()
+  )
+saveit(1, 5, 7)
+```
+
+```{r}
+#| fig-height: 2.5
+#| fig-width: 7
+
+dt |>
+  group_by(ai_use) |>
+  mean_ci(ai_bad, ci = .84) |>
+  ggplot() +
+  aes(
+    x = mean,
+    y = ifelse(ai_use == 0, "Non-users", "Users"),
+    xmin = lower,
+    xmax = upper
+  ) +
+  geom_pointrange(
+    color = "navy"
+  ) +
+  geom_text(
+    aes(label = scales::percent(mean)),
+    color = "navy",
+    vjust = -1,
+    fontface = "bold"
+  ) +
+  geom_vline(
+    xintercept = .5,
+    lty = 2,
+    color = "orange",
+    linewidth = 1
+  ) +
+  labs(
+    title = "AI Users Think AI Undermines Education",
+    subtitle = "Share saying AI undermines education by AI use (84% CIs shown)",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    labels = scales::percent
+  )
+saveit(2, 2.5, 7)
+```
+
