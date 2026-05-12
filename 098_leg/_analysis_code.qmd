@@ -1,0 +1,263 @@
+---
+title: "Legislative errosion"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(here)
+library(countrycode)
+library(patchwork)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange",
+    "gray"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "098_leg",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(vdemdata)
+
+vdem |>
+  filter(year > 1949) |>
+  transmute(country_text_id, year, 
+            dem = v2x_polyarchy, 
+            legcon = v2xlg_legcon,
+            exover = v2lgotovst_mean,
+            leginvest = v2lginvstp_mean,
+            legopp = v2lgoppart_mean,
+            legquest = v2lgqstexp_mean) -> dt
+```
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+ggplot(dt) +
+  aes(year, dem) +
+  geom_ribbon(
+    data = tibble(year = 2017:2021, dem = 1),
+    aes(ymin = -Inf, ymax = Inf),
+    alpha = .3
+  ) +
+  geom_text(
+    x = 2018.5,
+    y = .3,
+    label = "Trump 1.0",
+    angle = 90
+  ) +
+  geom_vline(
+    xintercept = 2025,
+    color = "gray70",
+    linewidth = 1
+  ) +
+  geom_text(
+    x = 2025,
+    y = .3,
+    label = "Trump 2.0",
+    angle = 90,
+    vjust = 1.2
+  ) +
+  geom_smooth(
+    aes(color = "Smoothed Global Average")
+  ) +
+  geom_line(
+    data = . %>% filter(country_text_id == "USA"),
+    aes(color = "USA"),
+    linewidth = 1
+  ) +
+  ggpal("binary") +
+  labs(
+    title = "Democratic Backsliding in the USA",
+    subtitle = "V-Dem version 16, v2x_polyarchy (Democracy Score)",
+    x = NULL,
+    y = NULL,
+    color = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = seq(1950, 2025, by = 5)
+  ) +
+  scale_y_continuous(
+    limits = 0:1
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+saveit(1, 5, 7)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+ggplot(dt) +
+  aes(year, legcon) +
+  geom_ribbon(
+    data = tibble(year = 2017:2021, legcon = 1),
+    aes(ymin = -Inf, ymax = Inf),
+    alpha = .3
+  ) +
+  geom_text(
+    x = 2018.5,
+    y = .3,
+    label = "Trump 1.0",
+    angle = 90
+  ) +
+  geom_vline(
+    xintercept = 2025,
+    color = "gray70",
+    linewidth = 1
+  ) +
+  geom_text(
+    x = 2025,
+    y = .3,
+    label = "Trump 2.0",
+    angle = 90,
+    vjust = 1.2
+  ) +
+  geom_smooth(
+    aes(color = "Smoothed Global Average")
+  ) +
+  geom_line(
+    data = . %>% filter(country_text_id == "USA"),
+    aes(color = "USA"),
+    linewidth = 1
+  ) +
+  ggpal("binary") +
+  labs(
+    title = "Blame Congress for the Backsliding",
+    subtitle = "V-Dem version 16, v2xlg_legcon (Legislative Constraints)",
+    x = NULL,
+    y = NULL,
+    color = NULL,
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = seq(1950, 2025, by = 5)
+  ) +
+  scale_y_continuous(
+    limits = 0:1
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+saveit(2, 5, 7)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+dt |>
+  filter(
+    country_text_id == "USA"
+  ) |>
+  pivot_longer(exover:legquest) |>
+  mutate(
+    valmax = rep(
+      c(4, 4, 2, 1),
+      len = n()
+    ),
+    value = value / valmax,
+    name = rep(
+      c("Oversight",
+        "Investigations",
+        "Opposition Parties",
+        "Questions Officials"),
+      len = n()
+    )
+  ) |>
+  ggplot() +
+  aes(year, value) +
+  geom_ribbon(
+    data = tibble(year = 2017:2021, value = 1, name = "Oversight"),
+    aes(ymin = -Inf, ymax = Inf),
+    alpha = .3
+  ) +
+  geom_text(
+    x = 2018.5,
+    y = .3,
+    label = "Trump 1.0",
+    angle = 90
+  ) +
+  geom_vline(
+    xintercept = 2025,
+    color = "gray70",
+    linewidth = 1
+  ) +
+  geom_text(
+    x = 2025,
+    y = .3,
+    label = "Trump 2.0",
+    angle = 90,
+    vjust = 1.2
+  ) +
+  geom_textline(
+    data = . %>% filter(name != "Oversight"),
+    aes(label = name, color = name),
+    show.legend = F,
+    hjust = 0,
+    family = "mono",
+    fontface = "bold",
+    size = 3
+  ) +
+  geom_textline(
+    data = . %>% filter(name == "Oversight"),
+    aes(label = name, color = name),
+    show.legend = F,
+    hjust = 0.075,
+    family = "mono",
+    fontface = "bold",
+    size = 3
+  ) +
+  ggpal() +
+  scale_x_continuous(
+    breaks = seq(1950, 2025, by = 5)
+  ) +
+  scale_y_continuous(
+    limits = 0:1,
+    breaks = c(0, .5, 1),
+    labels = c("Unlikely", "Uncertain", "Likely")
+  ) +
+  labs(
+    title = "Blame Expert Uncertainty About Congress",
+    subtitle = "V-Dem version 16 (v2lgotovst, v2lginvstp, v2lgoppart, v2lgqstexp)",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    axis.text.x = element_text(hjust = 1, angle = 45)
+  )
+saveit(3, 5, 7)
+```
