@@ -1,0 +1,328 @@
+---
+title: "Europe vs USA"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(here)
+library(countrycode)
+library(patchwork)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange",
+    "gray"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("orange3", "white", "navy")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "099_eu_v_us",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(globalmacrodata)
+
+gmd(
+  version = "2026_03"
+) -> dt
+```
+
+Relabel stuff so I'm less confused:
+
+```{r}
+dt |>
+  transmute(
+    isoc = ISO3,
+    year,
+    pop,
+    gdp = rGDP_USD,
+    tax = govtax_GDP * gdp,
+    hpi = HPI,
+    cpi = CPI,
+    infl
+  ) -> dt
+
+dt |>
+  mutate(
+    region = countrycode(isoc, "iso3c", "continent")
+  ) -> dt
+
+dt |>
+  filter(
+    region == "Europe" |
+      isoc == "USA"
+  ) -> dt
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+dt |>
+  filter(year >= 1800) |>
+  drop_na(gdp, pop) |>
+  group_by(year, region) |>
+  summarize(
+    gdppc = sum(gdp) / sum(pop)
+  ) |>
+  ggplot() +
+  aes(
+    x = year,
+    y = gdppc,
+    color = ifelse(region == "Americas", "USA", region)
+  ) +
+  geom_line(
+    linewidth = .75
+  ) +
+  scale_y_continuous(
+    labels = scales::dollar
+  ) +
+  scale_x_continuous(
+    breaks = seq(1800, 2025, by = 25)
+  ) +
+  ggpal("binary") +
+  labs(
+    title = "USA GDP/capita > Europe since 1860",
+    subtitle = "Real GDP/capita",
+    x = NULL,
+    y = NULL,
+    color = NULL,
+    caption = logo
+  )
+saveit(1, 5, 7)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  filter(year == 2025) |>
+  slice_max(gdp/pop, n = 10) |>
+  ggplot() +
+  aes(
+    x = gdp / pop,
+    y = reorder(isoc, gdp / pop)
+  ) +
+  geom_col(
+    fill = "orange"
+  ) +
+  geom_col(
+    data = . %>% filter(isoc == "USA"),
+    fill = "navy"
+  ) +
+  geom_text(
+    aes(
+      label = scales::dollar(gdp / pop)
+    ),
+    hjust = 1.1,
+    color = "white",
+    fontface = "bold"
+  ) +
+  theme(
+    panel.grid.major = element_blank()
+  ) +
+  scale_x_continuous(
+    breaks = NULL
+  ) +
+  labs(
+    title = "Some Europeans Are Richer Than America",
+    subtitle = "Top 10 for Real GDP/capita in 2025 Between USA and Europe",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(2, 5, 7)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+dt |>
+  filter(year >= 1800) |>
+  drop_na(gdp, pop) |>
+  group_by(year, region) |>
+  summarize(
+    gdp = sum(gdp) * 1e06,
+    pop = sum(pop) * 1e06,
+    sdp = (gdp - 60000 * pop) / 1e12
+  ) |>
+  ggplot() +
+  aes(
+    x = year,
+    y = sdp,
+    color = ifelse(region == "Americas", "USA", region)
+  ) +
+  geom_line(
+    linewidth = .75
+  ) +
+  scale_y_continuous(
+    labels = scales::dollar
+  ) +
+  scale_x_continuous(
+    breaks = seq(1800, 2025, by = 25)
+  ) +
+  ggpal("binary") +
+  labs(
+    title = "Only USA Could Subsidize a UMC",
+    subtitle = "Real GDP minus hypothetical cost of a universal middle class (UMC)",
+    x = NULL,
+    y = NULL,
+    color = NULL,
+    caption = logo
+  )
+saveit(3, 5, 7)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  filter(year == 2025) |>
+  mutate(
+    sdp = (1e06 * gdp - 60000 * 1e06 * pop) / 1e12
+  ) |>
+  filter(sdp > 0) |>
+  ggplot() +
+  aes(
+    x = sdp,
+    y = reorder(isoc, sdp)
+  ) +
+  geom_col(
+    fill = "orange"
+  ) +
+  geom_col(
+    data = . %>% filter(isoc == "USA"),
+    fill = "navy"
+  ) +
+  geom_text(
+    aes(
+      label = paste0(
+        "$", round(sdp, 2)
+      )
+    ),
+    hjust = -.1,
+    fontface = "bold"
+  ) +
+  theme(
+    panel.grid.major = element_blank()
+  ) +
+  scale_x_continuous(
+    breaks = NULL,
+    limits = c(0, 3)
+  ) +
+  labs(
+    title = "USA UMC Surplus > Even Richest Europeans",
+    subtitle = "Countries with UMC Surplus in 2025 Between USA and Europe",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(4, 5, 7)
+```
+
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+dt |>
+  filter(year >= 1950) |>
+  drop_na(tax, pop) |>
+  group_by(year, region) |>
+  summarize(
+    taxpc = sum(tax) / sum(pop)
+  ) |>
+  ggplot() +
+  aes(
+    x = year,
+    y = taxpc,
+    color = ifelse(region == "Americas", "USA", region)
+  ) +
+  geom_line(
+    linewidth = .75
+  ) +
+  scale_y_continuous(
+    labels = scales::dollar
+  ) +
+  scale_x_continuous(
+    breaks = seq(1800, 2025, by = 25)
+  ) +
+  ggpal("binary") +
+  labs(
+    title = "USA Tax Revenue/capita at Parity with Europe\n(Until 2025)",
+    subtitle = "Taxes per Capita",
+    x = NULL,
+    y = NULL,
+    color = NULL,
+    caption = logo
+  )
+saveit(5, 5, 7)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+dt |>
+  filter(year >= 1950) |>
+  drop_na(tax, pop) |>
+  group_by(year, region) |>
+  summarize(
+    tax = sum(tax) / 1e06
+  ) |>
+  ggplot() +
+  aes(
+    x = year,
+    y = tax,
+    color = ifelse(region == "Americas", "USA", region)
+  ) +
+  geom_line(
+    linewidth = .75
+  ) +
+  scale_y_continuous(
+    labels = scales::dollar
+  ) +
+  scale_x_continuous(
+    breaks = seq(1800, 2025, by = 25)
+  ) +
+  ggpal("binary") +
+  labs(
+    title = "USA Tax Revenue/capita at Parity with Europe\n(Until 2025)",
+    subtitle = "Taxes in trillions of USD",
+    x = NULL,
+    y = NULL,
+    color = NULL,
+    caption = logo
+  )
+saveit(6, 5, 7)
+```
