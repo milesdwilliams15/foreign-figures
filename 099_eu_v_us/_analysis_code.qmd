@@ -193,7 +193,7 @@ dt |>
   ggpal("binary") +
   labs(
     title = "Only USA Could Subsidize a UMC",
-    subtitle = "Real GDP minus hypothetical cost of a universal middle class (UMC)",
+    subtitle = "Real GDP in trillions minus hypothetical cost of a universal middle class (UMC)",
     x = NULL,
     y = NULL,
     color = NULL,
@@ -243,7 +243,7 @@ dt |>
   ) +
   labs(
     title = "USA UMC Surplus > Even Richest Europeans",
-    subtitle = "Countries with UMC Surplus in 2025 Between USA and Europe",
+    subtitle = "Top UMC Surplus in Trillions in 2025 Between USA and Europe",
     x = NULL,
     y = NULL,
     caption = logo
@@ -317,7 +317,7 @@ dt |>
   ) +
   ggpal("binary") +
   labs(
-    title = "USA Tax Revenue/capita at Parity with Europe\n(Until 2025)",
+    title = "USA Total Tax Revenue < Europe",
     subtitle = "Taxes in trillions of USD",
     x = NULL,
     y = NULL,
