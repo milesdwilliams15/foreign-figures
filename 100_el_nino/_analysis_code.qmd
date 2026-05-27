@@ -1,0 +1,546 @@
+---
+title: "El Nino"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(here)
+library(countrycode)
+library(patchwork)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "navy",
+    "red3",
+    "orange",
+    "gray"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("red3", "gray", "steelblue")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "100_el_nino",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+First get el nino data from our world in data's api:
+
+```{r}
+url <- "https://ourworldindata.org/grapher/global-temperature-anomalies-by-el-nino-la-nina.csv?v=1&csvType=full&useColumnShortNames=true"
+
+elnino <- read_csv(url)
+elnino |>
+  drop_na() |>
+  mutate(
+    year = year(day)
+  ) |>
+  group_by(year) |>
+  summarize(
+    oni_mean = mean(oni_anomaly),
+    world_temp = mean(temperature_anomaly),
+    status = frcode(
+      oni_mean < -0.5 ~ "La Ni\u00f1a",
+      oni_mean >= -0.5 &
+        oni_mean <= 0.5 ~ "Neutral",
+      oni_mean > 0.5 ~ "El Ni\u00f1o"
+    )
+  ) -> yearly_oni
+
+elnino |>
+  mutate(year = year(day)) |>
+  group_by(code, year) |>
+  summarize(
+    temp = mean(temperature_anomaly)
+  ) |>
+  ungroup() |>
+  mutate(
+    ccode = countrycode(code, "iso3c", "cown")
+  ) |>
+  drop_na() -> cy_temp
+
+cy_temp |>
+  left_join(yearly_oni) -> temp_dt
+```
+
+Bring in some economic and conflict data.
+
+```{r}
+source(here("_helpers", "peacesciencer_extras.R"))
+library(peacesciencer)
+
+create_stateyears(subset_years = 1950:2024) |>
+  add_gwcode_to_cow() |>
+  add_sim_gdp_pop() |>
+  add_ucdp_acd_new() -> ps_dt
+
+ps_dt |>
+  left_join(temp_dt) -> dt
+
+dt |>
+  group_by(ccode) |>
+  mutate(
+    gdppc = pwtrgdp / pwtpop,
+    gdppc_lag = lag(gdppc, order_by = year),
+    delta = (gdppc - gdppc_lag) / gdppc_lag
+  ) |>
+  ungroup() -> dt
+
+yearly_oni |>
+  left_join(
+    ucdp_acd |>
+      group_by(conflict_id) |>
+      summarize(
+        year = min(year)
+      ) |>
+      group_by(year) |>
+      summarize(
+        conflicts = n_distinct(conflict_id)
+      )
+  ) |>
+  left_join(
+    ps_dt |>
+      group_by(year) |>
+      summarize(
+        gdp = sum(pwtrgdp, na.rm = T),
+        pop = sum(pwtpop, na.rm = T)
+      )
+  ) -> world_dt
+
+world_dt |>
+  ungroup() |>
+  mutate(
+    gdppc = gdp / pop,
+    gdppc_lag = lag(gdppc, order_by = year),
+    delta = (gdppc - gdppc_lag) / gdppc_lag
+  ) -> world_dt
+```
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+world_dt |>
+  ggplot() +
+  aes(year, oni_mean) +
+  geom_col(
+    aes(fill = status)
+  ) +
+  ggpal(aes = "fill") +
+  labs(
+    title = "The El Ni\u00f1o vs La Ni\u00f1a Cycle",
+    subtitle = "Yearly Average ONI, 1950-2026 (Source: Our World in Data)",
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    fill = NULL
+  ) 
+saveit(1, 5, 7)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+world_dt |>
+  ggplot() +
+  aes(year, world_temp) +
+  geom_line(
+    color = "navy"
+  ) +
+  geom_smooth(
+    method = "gam",
+    se = F,
+    color = "orange"
+  ) +
+  geom_hline(
+    yintercept = 0,
+    lty = 2
+  ) +
+  labs(
+    title = "Temperatures on the Rise Gobally",
+    subtitle = "Mean yearly land surface temp in Celcius relative to period average\n(Source: Our World in Data)",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(2, 5, 7)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+source(here("_helpers", "my_mean_ci.R"))
+world_dt |>
+  ggplot() +
+  aes(oni_mean, delta) +
+  geom_point(
+    color = "navy"
+  ) +
+  geom_smooth(
+    method = "gam",
+    se = F,
+    color = "orange"
+  ) +
+  geom_vline(
+    xintercept = c(-.5, .5),
+    lty = 2
+  ) +
+  geom_text(
+    x = -.5,
+    y = .06,
+    label = expression(''%<-%'La Ni\u00f1a'),
+    hjust = 1.1
+  ) +
+  geom_text(
+    x = 0,
+    y = .06,
+    label = expression("Neutral")
+  ) +
+  geom_text(
+    x = .5,
+    y = .06,
+    label = expression("El Ni\u00f1o"%->%""),
+    hjust = -.1
+  ) +
+  labs(
+    title = "El Ni\u00f1o = Decline in Global GDP/capita Change",
+    subtitle = "GDP/capita by ONI from 1950 to 2019",
+    y = "% Change GDP/capita",
+    x = "Oceanic Ni\u00f1o Index",
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  )
+saveit(3, 5, 7)
+```
+
+```{r}
+world_dt |>
+  group_by(status) |>
+  summarize(
+    my_mean_ci(delta, .84)
+  ) |>
+  ggplot() +
+  aes(
+    x = status,
+    y = y,
+    ymin = ymin,
+    ymax = ymax
+  ) +
+  geom_col(
+    aes(fill = status),
+    show.legend = F
+  ) +
+  geom_errorbar(
+    width = .2,
+    color = "gray30",
+    linewidth = 1
+  ) +
+  geom_text(
+    aes(
+      y = 0,
+      label = scales::percent(y)
+    ),
+    color = "white",
+    fontface = "bold",
+    vjust = -.5
+  ) +
+  ggpal(aes = "fill") +
+  scale_y_continuous(
+    labels = scales::percent
+  ) +
+  labs(
+    title = "El Ni\u00f1o = Decline in Global GDP/capita Change",
+    subtitle = "GDP/capita by El Ni\u00f1o status from 1950 to 2019",
+    y = "% Change GDP/capita\n(84% CIs)",
+    x = NULL,
+    caption = logo
+  )
+saveit(4, 5, 7)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+world_dt |>
+  ggplot() +
+  aes(oni_mean, conflicts) +
+  geom_point(
+    color = "navy"
+  ) +
+  geom_smooth(
+    method = "gam",
+    se = F,
+    color = "orange"
+  ) +
+  geom_vline(
+    xintercept = c(-.5, .5),
+    lty = 2
+  ) +
+  geom_text(
+    x = -.5,
+    y = 15,
+    label = expression(''%<-%'La Ni\u00f1a'),
+    hjust = 1.1
+  ) +
+  geom_text(
+    x = 0,
+    y = 15,
+    label = expression("Neutral")
+  ) +
+  geom_text(
+    x = .5,
+    y = 15,
+    label = expression("El Ni\u00f1o"%->%""),
+    hjust = -.1
+  ) +
+  labs(
+    title = "El Ni\u00f1o = Increase in Global Conflict",
+    subtitle = "Unique Ongoing Conflicts by ONI from 1950 to 2024",
+    y = "Ongoing Conflicts",
+    x = "Oceanic Ni\u00f1o Index",
+    caption = logo
+  ) 
+saveit(5, 5, 7)
+```
+
+
+```{r}
+world_dt |>
+  group_by(status) |>
+  summarize(
+    my_mean_ci(conflicts, .84)
+  ) |>
+  ggplot() +
+  aes(
+    x = status,
+    y = y,
+    ymin = ymin,
+    ymax = ymax
+  ) +
+  geom_col(
+    aes(fill = status),
+    show.legend = F
+  ) +
+  geom_errorbar(
+    width = .2,
+    color = "gray30",
+    linewidth = 1
+  ) +
+  geom_text(
+    aes(
+      y = 0,
+      label = round(y, 2)
+    ),
+    color = "white",
+    fontface = "bold",
+    vjust = -.5
+  ) +
+  ggpal(aes = "fill") +
+  labs(
+    title = "El Ni\u00f1o = Increase in Global Conflict",
+    subtitle = "Conflicts by El Ni\u00f1o status from 1950 to 2024",
+    y = "Avg. Conflicts\n(84% CIs)",
+    x = NULL,
+    caption = logo
+  )
+saveit(6, 5, 7)
+```
+
+
+```{r}
+#| fig-height: 7
+#| fig-width: 7
+
+dt |>
+  drop_na(delta, status) |>
+  group_by(cw_name) |>
+  mutate(
+    n = n()
+  ) |>
+  ungroup() |>
+  filter(n >= 20) |>
+  mutate(
+    status = ifelse(
+      status != "El Ni\u00f1o", 0, 1
+    )
+  ) |>
+  group_split(cw_name) |>
+  map_dfr(~ lm(delta ~ status + temp, data = .x) |> broom::tidy() |>
+            mutate(
+              lower = estimate - 1.96 * std.error,
+              upper = estimate + 1.96 * std.error,
+              cw_name = .x$cw_name[1])) |>
+  filter(term == "status") |>
+  arrange(estimate) |>
+  mutate(
+    rows = 1:n(),
+    revs = n():1
+  ) |>
+  filter(
+    cw_name == "United States of America" |
+      (rows %in% 1:10) |
+      (revs %in% 1:10)
+  ) |>
+  ggplot() +
+  aes(
+    x = reorder(cw_name, estimate),
+    y = estimate,
+    ymin = lower,
+    ymax = upper
+  ) +
+  geom_pointrange(
+    aes(
+      color = estimate
+    ),
+    show.legend = F
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  ggpal(
+    "diverging"
+  ) +
+  geom_vline(
+    xintercept = c(10.5, 11.5),
+    lty = 2
+  ) +
+  geom_text(
+    x = 10,
+    y = 0.1,
+    hjust = 1,
+    vjust = 1.1,
+    label = expression(''%<-%"Worst Impacted")
+  ) +
+  geom_text(
+    x = 12,
+    y = 0.1,
+    hjust = 0,
+    vjust = 1.1,
+    label = expression("Least Impacted"%->%'')
+  ) +
+  geom_hline(
+    yintercept = 0
+  ) +
+  labs(
+    title = "El Ni\u00f1o's Uneven Impact on GDP",
+    subtitle = "OLS estimates by country with 95% CIs. Difference is for El Ni\u00f1o\nyears versus not, controling for average country temperature.",
+    x = NULL,
+    y = "% Change GDP/capita",
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  )
+saveit(7, 7, 7)
+```
+
+```{r}
+#| fig-height: 7
+#| fig-width: 7
+
+dt |>
+  drop_na(primary_party, status) |>
+  group_by(cw_name) |>
+  mutate(
+    n = n()
+  ) |>
+  ungroup() |>
+  filter(n >= 20) |>
+  mutate(
+    status = ifelse(
+      status != "El Ni\u00f1o", 0, 1
+    )
+  ) |>
+  group_split(cw_name) |>
+  map_dfr(~ lm(primary_party ~ status + temp, data = .x) |> broom::tidy() |>
+            mutate(
+              lower = estimate - 1.96 * std.error,
+              upper = estimate + 1.96 * std.error,
+              cw_name = .x$cw_name[1])) |>
+  filter(term == "status") |>
+  arrange(estimate) |>
+  mutate(
+    rows = 1:n(),
+    revs = n():1
+  ) |>
+  filter(
+    cw_name == "United States of America" |
+      (rows %in% 1:10) |
+      (revs %in% 1:10)
+  ) |>
+  ggplot() +
+  aes(
+    x = reorder(cw_name, estimate),
+    y = estimate,
+    ymin = lower,
+    ymax = upper
+  ) +
+  geom_pointrange(
+    aes(
+      color = -estimate
+    ),
+    show.legend = F
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  ggpal(
+    "diverging"
+  ) +
+  geom_vline(
+    xintercept = c(10.5, 11.5),
+    lty = 2
+  ) +
+  geom_text(
+    x = 10,
+    y = 0.75,
+    hjust = 1,
+    vjust = 1.1,
+    label = expression(''%<-%"Least Impacted")
+  ) +
+  geom_text(
+    x = 12,
+    y = 0.75,
+    hjust = 0,
+    vjust = 1.1,
+    label = expression("Most Impacted"%->%'')
+  ) +
+  geom_hline(
+    yintercept = 0
+  ) +
+  labs(
+    title = "El Ni\u00f1o's Uneven Impact on Conflict",
+    subtitle = "OLS estimates by country with 95% CIs. Difference is for El Ni\u00f1o\nyears versus not, controling for average country temperature.",
+    x = NULL,
+    y = "Change in Pr(Conflict = 1)",
+    caption = logo
+  ) 
+saveit(8, 7, 7)
+```
