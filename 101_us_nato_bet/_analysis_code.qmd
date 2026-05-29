@@ -1,0 +1,295 @@
+---
+title: "US leaving NATO?"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(here)
+library(countrycode)
+library(patchwork)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "orange",
+    "navy",
+    "red",
+    "green3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("steelblue", "gray", "red3")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 4, wd = 6) {
+  ggsave(
+    here::here(
+      "101_us_nato_bet",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data for Markets
+
+```{r}
+library(polymarketR)
+
+# event slug for US leaving NATO
+event_slug <- "will-us-withdraw-from-nato-before-2027"
+event <- get_event_by_slug(event_slug)
+
+# all markets for event
+markets <- get_event_markets(event_slug)
+
+# price history
+history <- get_event_prices_history(event_slug, interval = "max", fidelity = 60)
+
+# final data
+dt <- history |>
+  left_join(
+    markets |>
+      transmute(
+        market_id = id,
+        volume
+      )
+  ) |>
+  filter(outcome == "Yes")
+```
+
+Some extra cleaning:
+
+```{r}
+dt |>
+  transmute(
+    date = datetime,
+    item = mdy(paste(groupItemTitle, "2026")),
+    label = format.Date(item, "%B %d"),
+    price = price * 100
+  ) -> dt
+```
+
+
+
+## Figure for Markets
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+ggplot(dt) +
+  aes(
+    x = date,
+    y = price,
+    color = as.factor(item)
+  ) +
+  geom_line() +
+  ggpal(
+    labels = c("April", "June", "December")
+  ) +
+  labs(
+    title = "The Markets Favor US Staying in NATO",
+    subtitle = 'Prices for "yes" contracts that the US will leave NATO',
+    x = NULL,
+    y = NULL,
+    color = "By end of:",
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = scales::label_currency(
+      suffix = "\u00A2",
+      prefix = ""
+    ),
+    breaks = seq(0, 16, by = 2)
+  )
+saveit(1, 5, 7)
+```
+
+
+## Data for CC Survey
+
+```{r}
+read_csv(
+  here("_data", "chicago_council_svy.csv")
+) -> dt
+
+names(dt) <- c(
+  "year",
+  "us_role",
+  "nato_commitment",
+  "weaker_nations",
+  "usa_jobs",
+  "human_rights",
+  "defense",
+  "mil_aid",
+  "ec_aid",
+  "gender",
+  "ethnicity",
+  "education",
+  "generation",
+  "region",
+  "party",
+  "weights"
+)
+
+dt |>
+  filter(year == 2024) |>
+  mutate(
+    nato_commitment = frcode(
+      nato_commitment == "Withdraw entirely" ~ "Withdraw entirely",
+      nato_commitment == "Decrease commitment" ~ "Decrease",
+      nato_commitment == "Keep commitment same" ~ "Keep same",
+      nato_commitment == "Increase commitment" ~ "Increase",
+      TRUE ~ NA
+    ),
+    party = frcode(
+      party == "Democrat" ~ "Democrat",
+      party == "Independent" ~ "Independent",
+      party == "Republican" ~ "Republican",
+      TRUE ~ NA
+    ),
+    generation = frcode(
+      generation == "Gen Z" ~ "Gen Z",
+      generation == "Millennial" ~ "Millennial",
+      generation == "Gen X" ~ "Gen X",
+      generation == "Boomer" ~ "Boomer",
+      generation == "Greatest" ~ "Greatest",
+      generation == "Silent" ~ "Silent"
+    ),
+  ) -> dt
+```
+
+
+## Figures for CC survey
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  group_by(party) |>
+  ct(nato_commitment, show_na = F, wt = weights) |>
+  drop_na() |>
+  mutate(
+    se = sqrt(pct * (1 - pct) / n),
+    lo = pct - 1.41 * se,
+    hi = pct + 1.41 * se,
+    lo = ifelse(lo < 0, 0, lo),
+    hi = ifelse(hi > 1, 1, hi)
+  ) |>
+  ggplot() +
+  aes(
+    x = nato_commitment,
+    y = pct,
+    ymin = lo,
+    ymax = hi,
+    fill = party,
+    color = party
+  ) +
+  geom_col(
+    position = "dodge"
+  ) +
+  geom_errorbar(
+    linewidth = 1,
+    position = "dodge"
+  ) +
+  ggpal(
+    "diverging", ordinal = T, levels = 3
+  ) +
+  ggpal(
+    "diverging", "fill", ordinal = T, levels = 3
+  ) +
+  labs(
+    title = "Most US Citizens Like NATO Status Quo",
+    subtitle = "Source: Chicago Council on Foreign Affairs, 2024 Survey",
+    x = "\nPreference on US support for NATO",
+    y = "Share with 84% CIs",
+    caption = logo,
+    color = NULL,
+    fill = NULL
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  )
+saveit(2, 5, 7)
+```
+
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  group_by(generation) |>
+  ct(nato_commitment, show_na = F, wt = weights) |>
+  drop_na() |>
+  mutate(
+    se = sqrt(pct * (1 - pct) / n),
+    lo = pct - 1.41 * se,
+    hi = pct + 1.41 * se,
+    lo = ifelse(lo < 0, 0, lo),
+    hi = ifelse(hi > 1, 1, hi)
+  ) |>
+  ggplot() +
+  aes(
+    x = nato_commitment,
+    y = pct,
+    ymin = lo,
+    ymax = hi,
+    fill = generation,
+    color = generation
+  ) +
+  geom_col(
+    position = "dodge"
+  ) +
+  geom_errorbar(
+    linewidth = 1,
+    position = "dodge"
+  ) +
+  labs(
+    title = "Most US Citizens Like NATO Status Quo",
+    subtitle = "Source: Chicago Council on Foreign Affairs, 2024 Survey",
+    x = "\nPreference on US support for NATO",
+    y = "Share with 84% CIs",
+    caption = logo,
+    color = NULL,
+    fill = NULL
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  )
+saveit(3, 5, 7)
+```
+
+
+```{r}
+dt |>
+  mutate(nato = ifelse(nato_commitment %in% c("Keep same", "Increase"), 1, 0)) |>
+  group_by(party, generation) |>
+  ct(nato, wt = weights, show_na = F) |>
+  drop_na() |>
+  filter(nato == 1) |>
+  ggplot() +
+  aes(
+    x = party,
+    y = generation,
+    fill = pct,
+    label = scales::percent(pct)
+  ) +
+  geom_tile() +
+  geom_text()
+```
+
