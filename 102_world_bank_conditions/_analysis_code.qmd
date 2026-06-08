@@ -65,7 +65,7 @@ dt |>
     x = NULL,
     y = NULL,
     subtitle = "Total Disbursements in Billions of $",
-    title = "> $278 Billion Disbursed in DFPs Since 2005",
+    title = "> $278 Billion Disbursed in DPFs Since 2005",
     caption = logo
   ) +
   scale_y_continuous(
@@ -104,7 +104,7 @@ Average conditions per project by year:
 #| fig-width: 7
 dt |>
   group_by(year) |>
-  mean_ci(conditions, ci = .84) |>
+  mean_ci(conditions, ci = .84) 
   ggplot() +
   aes(year, mean, ymin = lower, ymax = upper) +
   geom_col(fill = "gray") +
@@ -141,7 +141,7 @@ dt |>
     x = NULL,
     y = NULL,
     subtitle = "Mean Ideal Point Distance from US (84% CIs)",
-    title = "Alignment with US Interests Increasing",
+    title = "Alignment with US Interests (Was) Increasing",
     caption = logo
   ) 
 saveit(4, 5, 7)
@@ -152,35 +152,18 @@ saveit(4, 5, 7)
 ```{r}
 library(mgcv)
 
-## Baseline Models
+## Baseline Model
 gam(
-  amount ~ ideal_dist_lag +
+  conditions ~ ideal_dist_lag +
     log(rgdp2015_lag / pop_lag) + log(pop_lag) +
     asinh(aid_lag) +
     s(ccode, bs = "re"),
   family = quasipoisson,
   data = dt
 ) -> fit1
-gam(
-  conditions ~ ideal_dist_lag +
-    log(rgdp2015_lag / pop_lag) + log(pop_lag) +
-    asinh(aid_lag) +
-    s(ccode, bs = "re"),
-  family = quasipoisson,
-  data = dt
-) -> fit2
 
 ## Including a Time Trend
 gam(
-  amount ~ ideal_dist_lag +
-    log(rgdp2015_lag / pop_lag) + log(pop_lag) +
-    asinh(aid_lag) +
-    s(ccode, bs = "re") +
-    year + I(year^2) + I(year^3),
-  family = quasipoisson,
-  data = dt
-) -> fit3
-gam(
   conditions ~ ideal_dist_lag +
     log(rgdp2015_lag / pop_lag) + log(pop_lag) +
     asinh(aid_lag) +
@@ -188,16 +171,16 @@ gam(
     year + I(year^2) + I(year^3),
   family = quasipoisson,
   data = dt
-) -> fit4
+) -> fit2
 ```
 
 Prep the models for visualization:
 
 ```{r}
-1:4 |>
+1:2 |>
   map_dfr(
     ~ ggregtab::tidy_coeftest(
-      list(fit1, fit2, fit3, fit4)[[.x]],
+      list(fit1, fit2)[[.x]],
       model = .x
     )
   ) |>
@@ -206,10 +189,8 @@ Prep the models for visualization:
   ) |>
   mutate(
     model = case_when(
-      model == 1 ~ "(1)\nDisbursed",
-      model == 2 ~ "(2)\nConditions",
-      model == 3 ~ "(3)\nDisbursed",
-      model == 4 ~ "(4)\nConditions"
+      model == 1 ~ "(1)\nNot Adjusting for\nTime Trned",
+      model == 2 ~ "(2)\nAdjusting for\nTime Trend"
     )
   ) -> model_out
 ```
@@ -226,10 +207,6 @@ model_out |>
     across(
       c(estimate, conf.low, conf.high),
       ~ exp(.x) - 1
-    ),
-    type = rep(
-      c("(A) No Adjusting for Time Trend", "(B) Adjusting for Time Trend"),
-      each = 2
     )
   ) |>
   ggplot() +
@@ -239,23 +216,22 @@ model_out |>
     ymin = conf.low,
     ymax = conf.high
   ) +
-  facet_wrap(~ type, scales = "free_x") +
   geom_pointrange() +
   geom_hline(
     yintercept = 0,
     lty = 2
   ) +
   labs(
-    x = "Estimates from PPML Models",
+    x = "\nEstimates from pseudo-Poisson Models",
     y = NULL,
-    subtitle = "% change predicted by moving 1 standard deviation away from the US ideal point",
+    subtitle = "% change for moving 1 standard deviation away from US ideal points",
     title = "Secular Trends Erase Conditionality Effect",
     caption = logo
   ) +
   scale_y_continuous(
     labels = scales::percent
   ) 
-saveit(5)
+saveit(5, 5, 7)
 ```
 
 
