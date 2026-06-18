@@ -1,0 +1,318 @@
+---
+title: "Why US didn't win in Iran?"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(here)
+library(countrycode)
+library(patchwork)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "orange",
+    "navy",
+    "red",
+    "green3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("steelblue", "gray", "red3")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 7) {
+  ggsave(
+    here::here(
+      "104_stalemate",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+## Data
+
+
+```{r}
+read_csv(
+  "~/Denison University/Teaching/teaching-r-proj/Teaching/DPR 390/Spring 2026/data/doe-dir-dyad-2.0.csv"
+) -> dt
+dt |>
+  rename(
+    ccode1 = ccode_a,
+    ccode2 = ccode_b
+  ) -> dt
+```
+
+Pull in some dyadic trade data:
+
+```{r}
+library(peacesciencer)
+create_dyadyears() |>
+  add_cow_trade() -> trade_dt
+
+dt |>
+  left_join(
+    trade_dt
+  ) -> dt
+
+dt |>
+  group_by(ccode1, year) |>
+  mutate(
+    imp_dep1 = flow1 / sum(flow1, na.rm = T),
+    exp_dep1 = flow2 / sum(flow2, na.rm = T),
+    trd_dep1 = (flow1 + flow2) / sum(flow1 + flow2, na.rm = T),
+    tot_imp1 = sum(flow1, na.rm = T),
+    tot_exp1 = sum(flow2, na.rm = T)
+  ) |>
+  group_by(ccode2, year) |>
+  mutate(
+    imp_dom1 = tot_imp1 / sum(tot_imp1, na.rm = T),
+    exp_dom1 = tot_exp1 / sum(tot_exp1, na.rm = T),
+    imp_dep2 = flow2 / sum(flow2, na.rm = T),
+    exp_dep2 = flow1 / sum(flow1, na.rm = T),
+    tot_imp2 = sum(flow2, na.rm = T),
+    tot_exp2 = sum(flow1, na.rm = T),
+    tot_trd2 = tot_imp2 + tot_exp2
+  ) |>
+  group_by(ccode1, year) |>
+  mutate(
+    imp_dom2 = tot_imp2 / sum(tot_imp2, na.rm = T),
+    exp_dom2 = tot_exp2 / sum(tot_exp2, na.rm = T),
+    trd_dom2 = tot_trd2 / sum(tot_trd2, na.rm = T)
+  ) |>
+  ungroup() -> dt
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  filter(ccode1 == 2) |>
+  ggplot() +
+  aes(
+    x = year
+  ) +
+  geom_smooth(
+    aes(y = pr_win_a, color = "US Wins")
+  ) +
+  geom_smooth(
+    aes(y = pr_stalemate, color = "Stalemate")
+  ) +
+  geom_smooth(
+    aes(y = pr_win_b, color = "US Loses")
+  ) +
+  ggpal() +
+  scale_x_continuous(
+    breaks = seq(1820, 2010, by = 10)
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, 1, by = .1),
+    labels = scales::percent
+  ) +
+  labs(
+    title = "Chance of US Victory Anywhere Is Down",
+    subtitle = "Smoothed trend in predicted outcomes if US attacks first\n(Based on DOE scores, 2.0)",
+    x = NULL,
+    y = "% Chance",
+    color = NULL,
+    caption = logo
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+saveit(1)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  ggplot() +
+  aes(
+    x = year
+  ) +
+  geom_smooth(
+    aes(y = pr_win_a, color = "Initiator Wins")
+  ) +
+  geom_smooth(
+    aes(y = pr_stalemate, color = "Stalemate")
+  ) +
+  geom_smooth(
+    aes(y = pr_win_b, color = "Target Wins")
+  ) +
+  ggpal() +
+  scale_x_continuous(
+    breaks = seq(1820, 2010, by = 10)
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, 1, by = .1),
+    labels = scales::percent
+  ) +
+  labs(
+    title = "Chance of Victory for Everyone Is Down",
+    subtitle = "Smoothed trend in predicted outcomes for all country pairs\n(Based on DOE scores, 2.0)",
+    x = NULL,
+    y = "% Chance",
+    color = NULL,
+    caption = logo
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+saveit(2)
+```
+
+
+```{r}
+glm(
+  pr_stalemate ~ log(1 + imp_dep1) + log(1 + exp_dep1) +
+    log(1 + imp_dep2) + log(1 + exp_dep2) +
+    year + I(year^2) + I(year^3),
+  data = dt,
+  family = quasibinomial
+) -> fit
+
+summary(fit)
+```
+
+```{r}
+library(lmtest)
+library(sandwich)
+dt <- dt |>
+  mutate(
+    dyad = 1000 * pmin(ccode1, ccode2) + pmax(ccode1, ccode2)
+  )
+rvc <- vcovCL(fit, cluster = dt$dyad)
+
+coeftest(fit, rvc)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+coeftest(fit, rvc) |>
+  broom::tidy() |>
+  mutate(
+    lower = estimate - 1.96 * std.error,
+    upper = estimate + 1.96 * std.error
+  ) |>
+  filter(str_detect(term, "dep")) |>
+  mutate(
+    order = 1:n()
+  ) |>
+  ggplot() +
+  aes(
+    x = estimate,
+    y = reorder(term, order),
+    xmin = lower,
+    xmax = upper
+  ) +
+  geom_pointrange() +
+  geom_vline(
+    xintercept = 0,
+    lty = 2
+  ) +
+  scale_x_continuous(
+    labels = ~ paste0(.x, "%")
+  ) +
+  scale_y_discrete(
+    labels = c("Challenger's\nImport Dependence",
+               "Challenger's\nExport Dependence",
+               "Target's\nImport Dependence",
+               "Target's\nExport Dependence")
+  ) +
+  labs(
+    title = "Trade Dependence Predicts Stalemate",
+    subtitle = "Logit model estimates with cluster-robust 95% CIs",
+    x = "\nChange in odds of stalemate\nper % change in predictor",
+    y = NULL,
+    caption = logo
+  )
+saveit(3)
+```
+
+```{r}
+glm(
+  pr_stalemate ~ log(1 + imp_dep1) + log(1 + exp_dep1) +
+    log(1 + imp_dep2) + log(1 + exp_dep2) +
+    log(1 + imp_dom1) + log(1 + exp_dom1) +
+    log(1 + imp_dom2) + log(1 + exp_dom2) +
+    year + I(year^2) + I(year^3),
+  data = dt,
+  family = quasibinomial
+) -> fit2
+
+summary(fit2)
+```
+
+
+```{r}
+rvc2 <- vcovCL(fit2, cluster = dt$dyad)
+
+coeftest(fit2, rvc2)
+```
+
+```{r}
+#| fig-height: 7
+#| fig-width: 7
+
+coeftest(fit2, rvc2) |>
+  broom::tidy() |>
+  mutate(
+    lower = estimate - 1.96 * std.error,
+    upper = estimate + 1.96 * std.error
+  ) |>
+  filter(!str_detect(term, "year|Int")) |>
+  mutate(order = 1:n()) |>
+  ggplot() +
+  aes(
+    x = estimate,
+    y = reorder(term, order),
+    xmin = lower,
+    xmax = upper
+  ) +
+  geom_pointrange() +
+  geom_vline(
+    xintercept = 0,
+    lty = 2
+  ) +
+  scale_x_continuous(
+    labels = ~ paste0(.x, "%")
+  ) +
+  scale_y_discrete(
+    labels = c("Challenger's\nImport Dependence",
+               "Challenger's\nExport Dependence",
+               "Target's\nImport Dependence",
+               "Target's\nExport Dependence",
+               "Challenger's Global\nImport Share",
+               "Challenger's Global\nExport Share",
+               "Target's Global\nImport Share",
+               "Target's Global\nExport Share")
+  ) +
+  labs(
+    title = "Global Trade Leverage Predicts Stalemate",
+    subtitle = "Logit model estimates with cluster-robust 95% CIs",
+    x = "\nChange in odds of stalemate\nper % change in predictor",
+    y = NULL,
+    caption = logo
+  )
+saveit(4)
+```
