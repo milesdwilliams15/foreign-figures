@@ -316,3 +316,41 @@ coeftest(fit2, rvc2) |>
   )
 saveit(4)
 ```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  filter(ccode1 == 2, ccode2 == 630) |>
+  drop_na() |>
+  ggplot() +
+  aes(x = year) +
+  geom_line(
+    aes(y = exp_dom1, color = "US"),
+    linewidth = 1
+  ) +
+  geom_line(
+    aes(y = exp_dom2, color = "Iran"),
+    linewidth = 1
+  ) +
+  ggpal("binary") +
+  scale_x_continuous(
+    breaks = seq(1900, 2020, by = 10)
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, 1, by = .05),
+    labels = scales::percent
+  ) +
+  labs(
+    title = "Decades Decline of US Global Trade Leverage",
+    subtitle = "Share of global exports",
+    x = NULL,
+    y = NULL,
+    color = NULL,
+    caption = logo
+  )
+saveit(5)
+```
+
