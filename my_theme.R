@@ -11,10 +11,11 @@ my_theme <- function() {
   ) +
     theme(
       plot.title.position = "plot",
-      panel.grid.major = element_line(
+      panel.grid.major.y = element_line(
         linewidth = 0.1,
         color = "gray50"
       ),
+      panel.grid.major.x = element_blank(),
       plot.caption = ggtext::element_markdown(),
       plot.caption.position = "plot",
       axis.title.x = element_text(

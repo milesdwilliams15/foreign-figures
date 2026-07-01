@@ -1,0 +1,404 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(here)
+library(countrycode)
+library(patchwork)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "orange",
+    "navy",
+    "red",
+    "green3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("steelblue", "gray", "red3")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 7) {
+  ggsave(
+    here::here(
+      "105_birth_death",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+Get COW and GW system data:
+
+```{r}
+library(peacesciencer)
+cow <- create_stateyears() |>
+  add_cow_majors()
+gwd <- create_stateyears(system = "gw") 
+
+dt <- bind_rows(
+  cow |> 
+    mutate(system = "CoW") |>
+    rename(code = ccode, name = cw_name),
+  gwd |> 
+    mutate(system = "GW") |>
+    rename(code = gwcode, name = gw_name)
+)
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  distinct(code, system) |>
+  count(system) |>
+  ggplot() +
+  aes(system, n) +
+  geom_col(
+    width = .5
+  ) +
+  geom_text(
+    aes(label = n),
+    vjust = 1.5,
+    color = "white",
+    fontface = "bold"
+  ) +
+  labs(
+    title = "Two systems, two sizes",
+    subtitle = "Total Unique Countries in Correlates of War vs. Gleditsch-Ward\nState Systems",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(1)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  distinct(code, system, microstate) |>
+  group_by(microstate) |>
+  count(system) |>
+  ggplot() +
+  aes(system, n) +
+  geom_col(
+    aes(fill = ifelse(microstate == 1, "Micro State (< 250k)", "State")),
+    width = .5
+  ) +
+  geom_text(
+    aes(label = n),
+    vjust = 1.5,
+    color = "white",
+    fontface = "bold",
+    position = "stack"
+  ) +
+  labs(
+    title = "Two systems, two sizes (and types?)",
+    subtitle = "Total Unique Countries in Correlates of War vs. Gleditsch-Ward\nState Systems",
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    fill = NULL
+  ) +
+  ggpal(
+    aes = "fill",
+    breaks = c("Micro State (< 250k)", "State")
+  )
+saveit(2)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  group_by(system) |>
+  count(year) |>
+  ggplot() +
+  aes(year, n, color = system) +
+  geom_line(
+    linewidth = 1
+  ) +
+  geom_text(
+    data = . %>%
+      filter(year %in% c(min(year), 1946, max(year)),
+             system == "GW"),
+    aes(label = n),
+    vjust = c(-.5, -1.25, -.5),
+    fontface = "bold",
+    show.legend = F
+  ) +
+  geom_text(
+    data = . %>%
+      filter(year %in% c(min(year), 1946, max(year)),
+             system == "CoW"),
+    aes(label = n),
+    vjust = c(1.5, 0, 1.5),
+    hjust = c(0, -.5, 0),
+    fontface = "bold",
+    show.legend = F
+  ) +
+  ggpal() +
+  labs(
+    title = "The mid-20th century nation baby boom",
+    subtitle = "Countries over time in Correlates of War vs. Gleditsch-Ward\nState Systems",
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = NULL
+  ) +
+  scale_x_continuous(
+    breaks = seq(1820, 2020, by = 10)
+  ) +
+  scale_y_continuous(
+    limits = c(0, 200),
+    breaks = seq(0, 200, by = 20)
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+saveit(3)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  group_by(code, system) |>
+  mutate(
+    keep = min(year) == 1816
+  ) |>
+  filter(keep) |>
+  group_by(system) |>
+  count(year) |>
+  ggplot() +
+  aes(year, n, color = system) +
+  geom_line(
+    linewidth = 1
+  ) +
+  geom_text(
+    data = . %>%
+      filter(year %in% c(min(year), max(year)),
+             system == "GW"),
+    aes(label = n),
+    vjust = -.5,
+    fontface = "bold",
+    show.legend = F
+  ) +
+  geom_text(
+    data = . %>%
+      filter(year %in% c(min(year), max(year)),
+             system == "CoW"),
+    aes(label = n),
+    vjust = 1.5,
+    fontface = "bold",
+    show.legend = F
+  ) +
+  ggpal() +
+  labs(
+    title = "Not all countries in 1816 survived to 2025",
+    subtitle = "Countries over time in Correlates of War vs. Gleditsch-Ward\nState Systems that were countries in 1816",
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = NULL
+  ) +
+  scale_x_continuous(
+    breaks = seq(1820, 2020, by = 10)
+  ) +
+  scale_y_continuous(
+    limits = c(0, 60),
+    breaks = seq(0, 200, by = 10)
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+saveit(4)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+cow_death_dt <- tibble(year = 1817:2025, n = 0)
+gwd_death_dt <- cow_death_dt
+`%nin%` <- negate(`%in%`)
+for(i in 1:nrow(cow_death_dt)) {
+  prev_cow_roll <- dt |> 
+    filter(system == "CoW", year == (cow_death_dt$year[i] - 1)) |> 
+    pull(code) |> 
+    unique()
+  curr_cow_roll <- dt |> 
+    filter(system == "CoW", year == cow_death_dt$year[i]) |> 
+    pull(code) |> 
+    unique()
+  cow_death_dt$n[i] <- sum(prev_cow_roll %nin% curr_cow_roll)
+  
+  prev_gwd_roll <- dt |> 
+    filter(system == "GW", year == (gwd_death_dt$year[i] - 1)) |> 
+    pull(code) |> 
+    unique()
+  curr_gwd_roll <- dt |> 
+    filter(system == "GW", year == gwd_death_dt$year[i]) |> 
+    pull(code) |> 
+    unique()
+  gwd_death_dt$n[i] <- sum(prev_gwd_roll %nin% curr_gwd_roll)
+}
+
+death_dt <- bind_rows(
+  cow_death_dt |> mutate(system = "CoW"),
+  gwd_death_dt |> mutate(system = "GW")
+) |>
+  group_by(system) |>
+  mutate(
+    cumn = cumsum(n)
+  ) |>
+  ungroup()
+
+death_dt |>
+  ggplot() +
+  aes(year, cumn, color = system) +
+  geom_line(
+    linewidth = 1
+  ) +
+  geom_text(
+    data = . %>%
+      filter(year == max(year),
+             system == "GW"),
+    aes(label = cumn),
+    vjust = 1.5,
+    fontface = "bold",
+    show.legend = F
+  ) +
+  geom_text(
+    data = . %>%
+      filter(year == max(year),
+             system == "CoW"),
+    aes(label = cumn),
+    vjust = -.5,
+    fontface = "bold",
+    show.legend = F
+  ) +
+  ggpal() +
+  labs(
+    title = "The steady accumulation of dead states",
+    subtitle = "Lost counties over time in Correlates of War vs. Gleditsch-Ward\nState Systems",
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = NULL
+  ) +
+  scale_x_continuous(
+    breaks = seq(1820, 2020, by = 10)
+  ) +
+  scale_y_continuous(
+    limits = c(0, 60),
+    breaks = seq(0, 200, by = 10)
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+saveit(5)
+```
+
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  group_by(system) |>
+  count(name) |>
+  ggplot() +
+  aes(n) +
+  geom_histogram(
+    fill = "steelblue",
+    color = "steelblue",
+    binwidth = 1
+  ) +
+  geom_labelvline(
+    data = . %>%
+      group_by(system) %>%
+      summarize(
+        n = median(n)
+      ),
+    aes(xintercept = n),
+    label = "Median",
+    lty = 2,
+    linewidth = 1,
+    color = "red3",
+    fontface = "bold",
+    family = "mono"
+  ) +
+  facet_wrap(~ system) +
+  scale_x_continuous(
+    breaks = seq(0, 220, by = 20)
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, 40, by = 5)
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  labs(
+    title = "The median country is ~65 years old",
+    subtitle = "Distribution of years, 1816-2025, that a country is in the\nCorrelates of War or Gleditsch-Ward State Systems",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(6)
+```
+
+```{r}
+dt |>
+  group_by(system) |>
+  count(code) |>
+  group_by(system) |>
+  summarize(
+    median(n)
+  )
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  group_by(system) |>
+  count(code) |>
+  group_by(system) |>
+  count(n) |>
+  mutate(
+    pct = nn / sum(nn)
+  ) |>
+  arrange(-n)
+```
