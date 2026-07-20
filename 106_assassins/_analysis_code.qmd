@@ -1,0 +1,323 @@
+---
+title: "Assassins"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(here)
+library(countrycode)
+library(patchwork)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "orange",
+    "navy",
+    "red",
+    "green3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("steelblue", "gray", "red3")
+)
+source(here::here("my_theme.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 7) {
+  ggsave(
+    here::here(
+      "106_assassins",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+## Data
+
+```{r}
+library(qss)
+data(package ="qss") # need "leaders"
+data("leaders")
+leaders
+?leaders
+```
+
+Calculate the number of political leaders from 1878 to 2001:
+
+```{r}
+peacesciencer::create_leaderyears() |>
+  filter(year %in% 1878:2001) -> dt
+dt |>
+  filter(year %in% 1878:2001) |>
+  distinct(leader) |>
+  count()
+```
+
+```{r}
+leaders |>
+  distinct(leadername) |>
+  count()
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+leaders |>
+  ct(result) |>
+  ggplot() +
+  aes(
+    x = n,
+    y = reorder(str_wrap(result, 20), n)
+  ) +
+  geom_col(
+    fill = "navy"
+  ) +
+  geom_text(
+    aes(label = n),
+    hjust = -.5,
+    color = "orange3",
+    fontface = "bold"
+  ) +
+  theme(
+    panel.grid.major.y = element_blank()
+  ) +
+  scale_x_continuous(
+    limits = c(0, 100),
+    breaks = NULL
+  ) +
+  labs(
+    title = "Most Assassins Fail",
+    subtitle = "Results of assassination attempts on leaders, 1878-2001 (QSS)",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(1)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+leaders |>
+  mutate(
+    result2 = frcode(
+      str_detect(result, "dies") ~ "Dies",
+      str_detect(result, "survives|but|lightly") ~ "Wounded",
+      result == "not wounded" ~ "Not wounded",
+      result == "plot stopped" ~ "Plot stopped"
+    )
+  ) -> leaders
+leaders |>
+  ct(result2) |>
+  ggplot() +
+  aes(
+    x = result2,
+    y = n
+  ) +
+  geom_col(
+    fill = "navy",
+    width = .5
+  ) +
+  geom_text(
+    aes(y = 0,label = n),
+    vjust = -.5,
+    color = "orange3",
+    fontface = "bold"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  labs(
+    title = "Most Assassins Fail",
+    subtitle = "Results of assassination attempts on leaders, 1878-2001 (QSS)",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(2)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+leaders |>
+  mutate(
+    dem = frcode(
+      politybefore < -5 ~ "Autocracy",
+      politybefore %in% c(-5:5) ~ "Anocracy",
+      politybefore > 5 ~ "Democracy"
+    )
+  ) -> leaders
+leaders |>  
+  group_by(dem) |>
+  ct(result2) |> 
+  drop_na() |>
+  ggplot() +
+  aes(
+    x = dem,
+    y = pct
+  ) + 
+  facet_wrap(~ result2, nrow = 1) +
+  geom_col(
+    fill = "navy"
+  ) +
+  geom_text(
+    aes(y = 0,label = scales::percent(pct, accuracy = 1)),
+    vjust = -.25,
+    color = "orange3",
+    fontface = "bold"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  labs(
+    title = "Assassins Have More Success in Democracies",
+    subtitle = "Results of assassination attempts on leaders, 1878-2001 (QSS)",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  )
+saveit(3)
+```
+
+```{r}
+#| fig-height: 7
+#| fig-width: 7
+source(here("_helpers", "my_mean_ci.R"))
+leaders |>
+  mutate(
+    demdiff = polityafter - politybefore
+  ) |>
+  group_by(dem, result2) |>
+  summarize(
+    my_mean_ci(demdiff),
+    .groups = "drop"
+  ) |>
+  drop_na() |>
+  ggplot() +
+  aes(
+    x = y,
+    xmin = ymin,
+    xmax = ymax,
+    y = dem 
+  ) +
+  facet_wrap(~ result2, ncol = 1) +
+  geom_pointrange() +
+  geom_vline(
+    xintercept = 0,
+    lty = 2
+  ) +
+  labs(
+    title = "Assassins Have Influence (Maybe)",
+    subtitle = "Difference in Polity 2 scores before and after attempt",
+    x = "Estimated Difference (95% CIs)",
+    y = NULL,
+    caption = logo
+  )
+saveit(4, 7, 7)
+```
+
+```{r}
+#| fig-height: 7
+#| fig-width: 7
+
+leaders |>
+  mutate(
+    demdiff = interwarafter - interwarbefore
+  ) |>
+  group_by(dem, result2) |>
+  summarize(
+    my_mean_ci(demdiff),
+    .groups = "drop"
+  ) |>
+  drop_na() |>
+  ggplot() +
+  aes(
+    x = y,
+    xmin = ymin,
+    xmax = ymax,
+    y = dem 
+  ) +
+  facet_wrap(~ result2, ncol = 1) +
+  geom_pointrange() +
+  geom_vline(
+    xintercept = 0,
+    lty = 2
+  ) +
+  labs(
+    title = "Assassins Have Influence (Maybe)",
+    subtitle = "Difference in war involvement before and after attempt",
+    x = "Estimated Difference (95% CIs)",
+    y = NULL,
+    caption = logo
+  )
+saveit(5, 7, 7)
+```
+
+```{r}
+#| fig-height: 7
+#| fig-width: 7
+
+leaders |>
+  mutate(
+    demdiff = civilwarafter - civilwarbefore
+  ) |>
+  group_by(dem, result2) |>
+  summarize(
+    my_mean_ci(demdiff),
+    .groups = "drop"
+  ) |>
+  drop_na() |>
+  ggplot() +
+  aes(
+    x = y,
+    xmin = ymin,
+    xmax = ymax,
+    y = dem 
+  ) +
+  facet_wrap(~ result2, ncol = 1) +
+  geom_pointrange() +
+  geom_vline(
+    xintercept = 0,
+    lty = 2
+  ) +
+  labs(
+    title = "Assassins Have Influence (Maybe)",
+    subtitle = "Difference in civil war involvement before and after attempt",
+    x = "Estimated Difference (95% CIs)",
+    y = NULL,
+    caption = logo
+  )
+saveit(6, 7, 7)
+```
+
+
+```{r}
+leaders |>
+  group_by(leadername) |>
+  summarize(
+    attempts = n()
+  ) |>
+  ct(attempts)
+```
+
