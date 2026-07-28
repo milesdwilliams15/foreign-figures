@@ -1,0 +1,222 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(here)
+library(countrycode)
+library(patchwork)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "orange",
+    "navy",
+    "red",
+    "green3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("steelblue", "gray", "red3")
+)
+source(here::here("_helpers", "splot.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 7) {
+  ggsave(
+    here::here(
+      "107_fires",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+## Data
+
+```{r}
+# Fetch the data
+dt <- read.csv("https://ourworldindata.org/grapher/cumulative-area-burnt-by-wildfires-by-week.csv?v=1&csvType=full&useColumnShortNames=false")
+
+dt |>
+  group_by(Code) |>
+  mutate(
+    X2026 = replace_na(X2026, max(X2026, na.rm = T))
+  ) |>
+  ungroup() |>
+  filter(!str_detect(Code, "OWID"), Year == 52) |>
+  select(-Year) |>
+  pivot_longer(
+    starts_with("X")
+  ) |>
+  mutate(
+    year = name |> str_remove_all("X") |> as.numeric()
+  ) |>
+  janitor::clean_names() |>
+  select(entity, code, year, value) -> dt
+```
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  group_by(year) |>
+  summarize(n = sum(value) / 1e06) |>
+  splot(year, n, label = round(n), vjust = 1.2, 
+        type = c("column", "text"),
+        title = "The World Is Burning a Littel Less",
+        subtitle = "Millions of hectares burned by year, 2012-2025") 
+saveit(1)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+source(here("_helpers", "my_mean_ci.R"))
+
+dt |>
+  filter(year < 2026) |>
+  group_by(entity) |>
+  summarize(my_mean_ci(value / 1e06, .84)) |>
+  slice_max(order_by = y, n = 10) |>
+  splot(
+    x = y, xmin = ymin, xmax = ymax,
+    y = reorder(entity, y),
+    type = "whisker",
+    size = .3,
+    title = "DRC Is Really Burning",
+    subtitle = "Top 10 countries by avg (2012-2025, millions) of hectares burned"
+  )
+saveit(2)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+dt |>
+  filter(year == 2026) |>
+  slice_max(value, n = 10) |>
+  splot(
+    x = value / 1e06,
+    y = reorder(entity, value),
+    type = "column",
+    title = "Canada, France, and Spain Not in '26 Top 10",
+    subtitle = "Millions of hectares burned so far in 2026 (top 10)"
+  )
+saveit(3)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  filter(year == 2026) |>
+  mutate(
+    rank = rank(-value)
+  ) |>
+  filter(
+    code %in% c("USA", "FRA", "CAN", "ESP")
+  ) |>
+  arrange(value) |>
+  splot(
+    x = value / 1e06,
+    y = reorder(paste0(entity, " (#", rank, ")"), value),
+    label = paste0(round(value / 1e06, 2), " mil"),
+    type = c("column", "text"),
+    hjust = c(-.1, -.1, 1.1, 1.1),
+    vjust = -.1,
+    title = "2026 Standings for US, CAN, FRA, and ESP",
+    subtitle = "Millions of hectares burned so far in 2026"
+  )
+saveit(4)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  group_by(year) |>
+  mutate(
+    rank = as.numeric(as.factor(-value))
+  ) |>
+  ungroup() |>
+  ggplot() +
+  aes(year, rank, group = entity) +
+  geom_line(
+    color = "gray",
+    linewidth = .1
+  ) +
+  geom_point(
+    color = "gray"
+  ) +
+  geom_line(
+    data = . %>% filter(code %in% c("USA", "FRA", "ESP", "CAN")),
+    aes(color = entity),
+    linewidth = 1
+  ) +
+  geom_point(
+    data = . %>% filter(code %in% c("USA", "FRA", "ESP", "CAN")),
+    aes(color = entity),
+    size = 3
+  ) +
+  geom_text(
+    data = . %>% filter(year == 2012) %>%
+      filter(code %in% c("USA", "FRA", "ESP", "CAN")),
+    aes(label = rank, color = entity),
+    hjust = 1.4,
+    fontface = "bold",
+    show.legend = F
+  ) +
+  geom_text(
+    data = . %>% filter(year == 2026) %>%
+      filter(code %in% c("USA", "FRA", "ESP")),
+    aes(label = rank, color = entity),
+    hjust = -.4,
+    fontface = "bold",
+    show.legend = F
+  ) +
+  geom_text(
+    data = . %>% filter(year == 2026) %>%
+      filter(code %in% c("CAN")),
+    aes(label = rank, color = entity),
+    vjust = 1.5,
+    hjust = -.4,
+    fontface = "bold",
+    show.legend = F
+  ) +
+  scale_x_continuous(
+    limits = c(2011, 2027),
+    breaks = 2012:2026
+  ) +
+  scale_y_continuous(
+    transform = "reverse"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  ggpal() +
+  labs(
+    title = "Spain, France, & Canada Rank > Since 2012",
+    subtitle = "Yearly rank in hectares burned, 2012-2026",
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    color = NULL
+  )
+saveit(5)
+```
+
