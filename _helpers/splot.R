@@ -6,7 +6,8 @@ source(here::here("my_theme.R"))
 # create smart plot function
 splot <- function(data, ...,
                   type = "scatter",
-                  hjust = 0.5, vjust = 0.5,
+                  hjust = 0.5, vjust = 0.5, 
+                  xangle = FALSE,
                   color = "black", fill = "gray",
                   shape = 19, linetype = 1,
                   size = 2, method = "gam", formula = y ~ s(x),
@@ -31,6 +32,9 @@ splot <- function(data, ...,
     my_theme() + 
     labs(title = title, subtitle = subtitle, x = xlab, y = ylab,
            caption = logo)
+  
+  ## update angle of x-axis?
+  if (xangle) p <- p + theme(axis.text.x = element_text(angle = 45, hjust = 1))
   
   suppressWarnings(print(p))
 }

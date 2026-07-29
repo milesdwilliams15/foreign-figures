@@ -45,25 +45,26 @@ saveit <- function(num = 1, ht = 5, wd = 7) {
 
 ```{r}
 # Fetch the data
-dt <- read.csv("https://ourworldindata.org/grapher/cumulative-area-burnt-by-wildfires-by-week.csv?v=1&csvType=full&useColumnShortNames=false")
+dt <- read_csv("https://ourworldindata.org/grapher/cumulative-area-burnt-by-wildfires-by-week.csv?v=1&csvType=full&useColumnShortNames=false")
 
 dt |>
   group_by(Code) |>
   mutate(
-    X2026 = replace_na(X2026, max(X2026, na.rm = T))
+    `2026` = replace_na(`2026`, max(`2026`, na.rm = T))
   ) |>
   ungroup() |>
   filter(!str_detect(Code, "OWID"), Year == 52) |>
   select(-Year) |>
   pivot_longer(
-    starts_with("X")
+    starts_with("20")
   ) |>
   mutate(
-    year = name |> str_remove_all("X") |> as.numeric()
+    year = as.numeric(name)
   ) |>
   janitor::clean_names() |>
   select(entity, code, year, value) -> dt
 ```
+
 ## Figures
 
 ```{r}
@@ -71,12 +72,14 @@ dt |>
 #| fig-width: 7
 
 dt |>
+  mutate(year = as.factor(year)) |>
   group_by(year) |>
   summarize(n = sum(value) / 1e06) |>
   splot(year, n, label = round(n), vjust = 1.2, 
         type = c("column", "text"),
+        xangle = T,
         title = "The World Is Burning a Littel Less",
-        subtitle = "Millions of hectares burned by year, 2012-2025") 
+        subtitle = "Millions of hectares burned by year, 2012-2026") 
 saveit(1)
 ```
 
