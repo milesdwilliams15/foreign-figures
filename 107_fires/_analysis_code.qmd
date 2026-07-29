@@ -98,7 +98,6 @@ dt |>
     x = y, xmin = ymin, xmax = ymax,
     y = reorder(entity, y),
     type = "whisker",
-    size = .3,
     title = "DRC Is Really Burning",
     subtitle = "Top 10 countries by avg (2012-2025, millions) of hectares burned"
   )
@@ -222,4 +221,5 @@ dt |>
   )
 saveit(5)
 ```
+
 
