@@ -14,10 +14,9 @@ splot <- function(data, ...,
                   title = NULL, subtitle = NULL,
                   xlab = NULL, ylab = NULL) {
   
-  ## set global default for all future geom_point calls
-  update_geom_defaults("point", list(color = "black"))
-  update_geom_defaults("line", list(color = "black"))
+  ## set global default for all future geom_col and _histogram calls
   update_geom_defaults("col", list(fill = "gray"))
+  update_geom_defaults("histogram", list(fill = "gray"))
   
   ## base plot with user-supplied aesthetics
   p <- ggplot(data, aes(...))

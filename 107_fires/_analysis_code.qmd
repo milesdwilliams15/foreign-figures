@@ -45,9 +45,9 @@ saveit <- function(num = 1, ht = 5, wd = 7) {
 
 ```{r}
 # Fetch the data
-dt <- read_csv("https://ourworldindata.org/grapher/cumulative-area-burnt-by-wildfires-by-week.csv?v=1&csvType=full&useColumnShortNames=false")
+fdt <- read_csv("https://ourworldindata.org/grapher/cumulative-area-burnt-by-wildfires-by-week.csv?v=1&csvType=full&useColumnShortNames=false")
 
-dt |>
+fdt |>
   group_by(Code) |>
   mutate(
     `2026` = replace_na(`2026`, max(`2026`, na.rm = T))
@@ -222,4 +222,37 @@ dt |>
 saveit(5)
 ```
 
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+fdt |>
+  filter(Code %in% c("USA", "FRA", "ESP", "CAN")) |>
+  pivot_longer(starts_with("20")) |>
+  mutate(name = as.numeric(name)) |>
+  ggplot() +
+  aes(Year, value, group = name) +
+  facet_wrap(~ Entity, scales = "free") +
+  geom_line(color = "gray") +
+  geom_line(
+    data = . %>% filter(name == 2026),
+    aes(color = "2026"),
+    linewidth = 1
+  ) +
+  scale_y_continuous(
+    labels = ~ ifelse(
+      .x > 1e06, paste0(.x / 1e06, " mil"),
+      scales::comma(.x)
+    )
+  ) +
+  labs(
+    title = "France's Unusually Bad Year",
+    subtitle = "Weekly cumulative hectares burned by year",
+    x = "Week",
+    y = NULL,
+    color = NULL,
+    caption = logo
+  )
+saveit(6)
+```
 
