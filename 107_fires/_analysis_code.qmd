@@ -76,7 +76,7 @@ dt |>
   group_by(year) |>
   summarize(n = sum(value) / 1e06) |>
   splot(year, n, label = round(n), vjust = 1.2, 
-        type = c("column", "text"),
+        type = c("col", "text"),
         xangle = T,
         title = "The World Is Burning a Littel Less",
         subtitle = "Millions of hectares burned by year, 2012-2026") 
@@ -97,7 +97,8 @@ dt |>
   splot(
     x = y, xmin = ymin, xmax = ymax,
     y = reorder(entity, y),
-    type = "whisker",
+    type = "pointrange",
+    vline = 0,
     title = "DRC Is Really Burning",
     subtitle = "Top 10 countries by avg (2012-2025, millions) of hectares burned"
   )
@@ -113,7 +114,7 @@ dt |>
   splot(
     x = value / 1e06,
     y = reorder(entity, value),
-    type = "column",
+    type = "col",
     title = "Canada, France, and Spain Not in '26 Top 10",
     subtitle = "Millions of hectares burned so far in 2026 (top 10)"
   )
@@ -137,7 +138,7 @@ dt |>
     x = value / 1e06,
     y = reorder(paste0(entity, " (#", rank, ")"), value),
     label = paste0(round(value / 1e06, 2), " mil"),
-    type = c("column", "text"),
+    type = c("col", "text"),
     hjust = c(-.1, -.1, 1.1, 1.1),
     vjust = -.1,
     title = "2026 Standings for US, CAN, FRA, and ESP",
