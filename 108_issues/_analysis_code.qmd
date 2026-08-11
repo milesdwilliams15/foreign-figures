@@ -1,0 +1,156 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(here)
+library(countrycode)
+library(patchwork)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "orange",
+    "navy",
+    "red",
+    "green3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("steelblue", "gray", "red3")
+)
+source(here::here("_helpers", "splot.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 7) {
+  ggsave(
+    here::here(
+      "108_issues",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+## Data
+
+```{r}
+## google time series trend
+ts <- read_csv(here("_data", "gtrends_issues.csv"))
+
+## google trends by state
+cs <- read_csv(here("_data", "gtrends_issues_state_breakdown.csv"))
+
+## us pres election results 2024
+library(readxl)
+us <- read_excel("../_data/2024_Presidential_Election_Results/Presidential Election Results by US County 2024.xlsx")
+```
+
+
+clean the us election data
+
+```{r}
+us |>
+  mutate(state = STATE_NAME) |>
+  group_by(state) |>
+  summarize(
+    trump_tot = sum(Votes_Trump, na.rm = T),
+    harris_tot = sum(Votes_Harris, na.rm = T),
+    r_pct = trump_tot / (trump_tot + harris_tot),
+    d_pct = 1 - r_pct
+  ) -> us
+```
+
+clean the other data
+
+```{r}
+ts |>
+  janitor::clean_names() |>
+  mutate(
+    week = as.Date(week, format = "%m/%d/%Y"),
+    us_iran_war_united_states = us_iran_war_united_states |>
+      str_replace_all("<1", "0") |>
+      as.numeric()
+  ) |>
+  pivot_longer(-1) |>
+  mutate(
+    name = name |>
+      str_remove_all("_united_states") |>
+      str_replace_all("_", " ")
+  ) -> ts
+```
+
+```{r}
+cs |>
+  janitor::clean_names() |>
+  rename(
+    state = region
+  ) |>
+  pivot_longer(
+    - state
+  ) |>
+  mutate(
+    name = name |>
+      str_remove_all(
+        "_8_10_25_8_10_26"
+      ) |>
+      str_replace_all("_", " "),
+    value = value |>
+      str_remove_all("%") |>
+      as.numeric()
+  ) -> cs
+```
+
+combine cs with us
+
+```{r}
+cs |>
+  left_join(us) -> cs
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+splot(
+  ts,
+  x = week,
+  y = value,
+  color = name,
+  type = "line",
+  title = "Immigration is the top issue",
+  subtitle = "Google trends for United States from 08.10.2025 to 08.10.2026"
+)
+saveit(1)
+```
+
+```{r}
+#| fig-height: 7
+#| fig-width: 7
+splot(
+  cs |> filter(state != "District of Columbia"),
+  x = r_pct,
+  y = value,
+  type = c("point", "smooth"),
+  facet = ~ name,
+  scales = "free_y",
+  formula = y ~ x,
+  title = "Republicans have an uphill battle",
+  subtitle = "% topic shares by Trump's 2024 votes share per state (DC and AK not included)" |>
+    str_wrap(60)
+)
+saveit(2)
+```
+

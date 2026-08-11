@@ -25,6 +25,7 @@ splot <- function(data, ...,
                   se = TRUE,
                   facet = NULL,
                   scales = "fixed",
+                  facet_col = 2,
                   title = NULL, subtitle = NULL,
                   xlab = NULL, ylab = NULL) {
   
@@ -48,13 +49,17 @@ splot <- function(data, ...,
   if (!is.null(vline)) p <- p + geom_vline(xintercept = vline, linetype = 2)
   
   ## facet the plot
-  if (!is.null(facet)) p <- p + facet_wrap(facet, scales = scales)
+  if (!is.null(facet)) p <- p + facet_wrap(facet, scales = scales, ncol = facet_col)
   
   ## return plot with custom theme and labels
   p <- p + 
     my_theme() + 
     labs(title = title, subtitle = subtitle, x = xlab, y = ylab,
-           caption = logo) +
+           caption = logo,
+         color = NULL,
+         fill = NULL,
+         linetype = NULL,
+         size = NULL) +
     ggpal(type = pal, aes = aes)
   
   ## update angle of x-axis?
@@ -79,11 +84,11 @@ splot <- function(data, ...,
 #     vline = 0
 #   )
 
-splot(
-  mtcars,
-  hp, mpg, 
-  type = c("point", "smooth"), 
-  formula = y ~ x,
-  facet = ~ cyl,
-  scales = "free_x"
-)
+# splot(
+#   mtcars,
+#   hp, mpg, 
+#   type = c("point", "smooth"), 
+#   formula = y ~ x,
+#   facet = ~ cyl,
+#   scales = "free_x"
+# )
