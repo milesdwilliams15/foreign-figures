@@ -1,0 +1,122 @@
+---
+title: "2024 presidential election: county-level exploration"
+---
+
+::: {.callout-note}
+This report was generated using AI under general human direction. At the time of generation, the contents have not been comprehensively reviewed by a human analyst.
+:::
+
+## Setup
+
+```{r}
+#| label: load-packages
+library(tidyverse)
+library(readxl)
+library(usmap)
+```
+
+```{r}
+#| label: load-data
+election <- read_excel(
+  "../_data/2024_Presidential_Election_Results/Presidential Election Results by US County 2024.xlsx"
+)
+```
+
+## Data structure
+
+The dataset contains county-level (and county-equivalent) results for the 2024 U.S. presidential election, along with the winning candidate in 2024, 2020, and 2016.
+
+```{r}
+#| label: glimpse-data
+glimpse(election)
+```
+
+The data covers `{r} n_distinct(election$STATE_NAME)` states/territories across `{r} nrow(election)` rows.
+
+```{r}
+#| label: winner-counts
+election |>
+  count(Winner_2024)
+```
+
+Excluding rows with missing vote counts, the national two-party-plus totals are:
+
+```{r}
+#| label: vote-totals
+election |>
+  summarise(
+    total_votes = sum(Votes_Tot, na.rm = TRUE),
+    trump = sum(Votes_Trump, na.rm = TRUE),
+    harris = sum(Votes_Harris, na.rm = TRUE),
+    stein = sum(Votes_Stein, na.rm = TRUE)
+  )
+```
+
+## Missing data
+
+Vote totals, vote counts by candidate, and vote shares are each missing for exactly one county:
+
+```{r}
+#| label: missing-votes
+election |>
+  filter(is.na(Votes_Tot))
+```
+
+This is **Kalawao County, Hawaii** — the smallest county in the U.S. by population (a former Hansen's disease settlement on Molokai). Its missing values are plausibly a genuine data gap rather than an entry error, given how few residents it has.
+
+Separately, `Winner_2020` and `Winner_2016` are missing for a larger set of counties:
+
+```{r}
+#| label: missing-historical-winners
+election |>
+  summarise(across(c(Winner_2024, Winner_2020, Winner_2016), ~ sum(is.na(.))))
+```
+
+```{r}
+#| label: missing-historical-winners-by-state
+election |>
+  filter(is.na(Winner_2020) | is.na(Winner_2016)) |>
+  count(STATE_NAME)
+```
+
+These missing historical winners are concentrated in Virginia (38 of 39 counties), with one additional case in Hawaii. This pattern looks systematic rather than random — it likely reflects how Virginia's independent cities are handled in the source data across election years — and is worth further investigation before using the historical winner columns.
+
+## County-level margin map
+
+We compute the two-party vote margin for each county as the Trump minus Harris vote share, using only Trump and Harris votes in the denominator (i.e., excluding Stein and other third-party votes):
+
+```{r}
+#| label: compute-margin
+county_margin <- election |>
+  filter(!is.na(Votes_Trump), !is.na(Votes_Harris)) |>
+  mutate(
+    two_party_total = Votes_Trump + Votes_Harris,
+    margin = (Votes_Trump - Votes_Harris) / two_party_total,
+    fips = FIPS
+  )
+```
+
+```{r}
+#| label: fig-county-margin-map
+#| fig-height: 6
+#| fig-width: 8
+plot_usmap(
+  regions = "counties",
+  data = county_margin,
+  values = "margin",
+  color = NA
+) +
+  scale_fill_gradient2(
+    low = "#2166AC", mid = "white", high = "#B2182B",
+    midpoint = 0,
+    labels = scales::label_percent(),
+    name = "Margin (Trump \u2212 Harris)"
+  ) +
+  labs(title = "2024 presidential election: county-level two-party vote margin") +
+  theme(legend.position = "right")
+```
+
+Two limitations to note when reading this map:
+
+- **Alaska is not shown.** The source data contains no Alaska rows at all — Alaska reports results by state house district rather than by county/borough, so there is nothing to join to the map.
+- **A small gray sliver** (visible in the Northeast on this projection) corresponds to Kalawao County, HI, which has no vote data as noted above.
