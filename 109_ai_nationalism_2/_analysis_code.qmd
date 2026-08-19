@@ -1,0 +1,274 @@
+---
+title: "Untitled"
+format: html
+---
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(here)
+library(countrycode)
+library(patchwork)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "orange",
+    "navy",
+    "red",
+    "green3"
+  ),
+  binary = c("orange3", "navy"),
+  sequential = c("white", "navy"),
+  diverging = c("steelblue", "gray", "red3")
+)
+source(here::here("_helpers", "splot.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 7) {
+  ggsave(
+    here::here(
+      "109_ai_nationalism_2",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+
+## Data
+
+source: https://epoch.ai/publications/tracking-large-scale-ai-models#appendix
+
+```{r}
+read_csv(
+  "https://epoch.ai/data/large_scale_ai_models.csv"
+) -> dt
+```
+
+Okay human brain, let's see if we can write some code to wrangle this. How about let's do, per country and year, the number of unique models, organizations, training compute, whether NVIDIA chips were used at all, accessibility, average training compute cost on the cloud and upfront.
+
+```{r}
+dt |>
+  janitor::clean_names() -> dt
+
+dt |>
+  mutate(
+    year = year(publication_date),
+    country = country_of_organization
+  ) |>
+  mutate(country = str_split(country, ",\\s*")) |>
+  mutate(country = map(country, unique)) |>
+  unnest(country) |> 
+  group_by(year, country) |>
+  summarize(
+    models = n_distinct(model, na.rm = T),
+    flops  = sum(training_compute_flop, na.rm = T),
+    nvidia = any(str_detect(training_hardware, "NVIDIA")) + 0,
+    open   = mean(str_detect(training_code_accessibility, "Open"), na.rm = T),
+    cost   = mean(training_compute_cost_upfront, na.rm = T)
+  ) |>
+  ungroup() -> ydt
+
+dt |>
+  mutate(
+    date = floor_date(publication_date, "month"),
+    country = country_of_organization
+  ) |>
+  mutate(country = str_split(country, ",\\s*")) |>
+  mutate(country = map(country, unique)) |>
+  unnest(country) |> 
+  group_by(date, country) |>
+  summarize(
+    models = n_distinct(model, na.rm = T),
+    flops  = sum(training_compute_flop, na.rm = T),
+    nvidia = sum(str_detect(training_hardware, "NVIDIA"), na.rm = T) + 0,
+    open   = mean(str_detect(training_code_accessibility, "Open"), na.rm = T),
+    cost   = mean(training_compute_cost_upfront, na.rm = T)
+  ) |>
+  ungroup() -> mdt
+```
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+ydt |>
+  group_by(year) |>
+  summarize(
+    Models = sum(models),
+    FLOP  = sum(flops)
+  ) |>
+  pivot_longer(-year) |>
+  splot(
+    x = as.factor(year), y = value,
+    type = "col",
+    facet = ~ name,
+    scales = "free",
+    xangle = T,
+    title = "Is AI Nationalism Hitting a Ceiling?",
+    subtitle = "Total yearly count of training compute (FLOP) and unique Models\n(Source: Epoch AI)"
+  )
+saveit(1)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+mdt |>
+  group_by(date) |>
+  summarize(
+    Models = sum(models),
+    FLOP  = sum(flops)
+  ) |>
+  pivot_longer(-date) |>
+  splot(
+    x = date, y = value,
+    geom_args = list(color = "black", fill = "black"),
+    type = "col",
+    facet = ~ name,
+    scales = "free",
+    xangle = T,
+    title = "Maybe AI Nationalism IS Hitting a Ceiling",
+    subtitle = "Total monthly count of training compute (FLOP) and unique Models\n(Source: Epoch AI)"
+  )
+saveit(2)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+mdt |>
+  filter(
+    country %in% c("United States of America", "China")
+  ) |>
+  group_by(date, country) |>
+  summarize(
+    Models = sum(models),
+    FLOP  = sum(flops)
+  ) |>
+  mutate(
+    country = countrycode(country, "country.name", "iso3c")
+  ) |>
+  pivot_longer(3:4) |> 
+  splot(
+    x = date, y = value, color = country,
+    type = "line",
+    facet = ~ name,
+    scales = "free",
+    xangle = T,
+    title = "AI Great Power Competition Hits a Ceiling",
+    subtitle = "Total monthly count of training compute (FLOP) and unique models\nproduced by the US and China (Source: Epoch AI)"
+  )
+saveit(3)
+```
+
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+mdt |>
+  mutate(
+    country = countrycode(country, "country.name", "iso3c")
+  ) |>
+  group_by(country) |>
+  summarize(
+    nvidia = sum(nvidia, na.rm = T)
+  ) |>
+  arrange(-nvidia) |>
+  filter(nvidia > 0) |>
+  splot(
+    x = nvidia, y = reorder(country, nvidia),
+    label = nvidia,
+    type = c("col", "text"),
+    hjust = -0.3,
+    title = "US Wins on Access to NVIDIA",
+    subtitle = "Known count of models (2019-2026) trained on NVIDIA hardware"
+  ) 
+saveit(4)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+mdt |>
+  filter(
+    country %in% c("United States of America", "China")
+  ) |>
+  group_by(date, country) |>
+  summarize(
+    compute_per_model = mean(flops)
+  ) |>
+  mutate(
+    country = countrycode(country, "country.name", "iso3c")
+  ) |>
+  splot(
+    x = date,
+    y = compute_per_model,
+    color = country,
+    type = "line",
+    title = "Training Compute/Model Hits a Ceiling, Too",
+    subtitle = "Average training compute (FLOP) per newly trained model\n(Source: Epoch AI)"
+  )
+saveit(5)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  filter(
+    country_of_organization == "United States of America"
+  ) |>
+  drop_na(training_compute_cost_upfront) |>
+  mutate(
+    country = countrycode(country_of_organization, "country.name", "iso3c")
+  ) |> 
+  arrange(training_compute_cost_upfront) |> 
+  ggplot() +
+  aes(publication_date, training_compute_cost_upfront) +
+  geom_point(
+    color = "gray30"
+  ) +
+  stat_smooth(
+    method = "gam",
+    method.args = list(family = quasipoisson),
+    alpha = 0.3,
+    se = F,
+    color = "navy"
+  ) +
+  geom_text_repel(
+    data = . %>% slice(c(1:4, 10:12)),
+    aes(label = model),
+    min.segment.length = 0,
+    nudge_x = -50,
+    nudge_y = rep(c(1e09, -1e09, 1.5e09, -1.5e09), length.out = 5),
+    direction = "y"
+  ) +
+  scale_y_continuous(
+    labels = ~ scales::dollar(.x / 1e09),
+    breaks = seq(0, 12e09, by = 2e09)
+  ) +
+  labs(
+    title = "The exponential cost of training models",
+    subtitle = "The upfront cost of training models in the US in billions of $\n(Source: Epoch AI)",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(6)
+```
+
