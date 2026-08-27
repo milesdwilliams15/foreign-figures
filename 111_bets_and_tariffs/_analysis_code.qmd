@@ -1,0 +1,279 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(ggridges)
+library(here)
+library(countrycode)
+library(patchwork)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "orange",
+    "navy",
+    "red",
+    "green3"
+  ),
+  binary = c("gray30", "red"),
+  sequential = c("white", "navy"),
+  diverging = c("steelblue", "gray", "red3")
+)
+source(here::here("_helpers", "splot.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 7) {
+  ggsave(
+    here::here(
+      "111_bets_and_tariffs",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+Need to install the polymarketR package:
+
+```{r}
+# Install polymarketR from GitHub
+# devtools::install_github("clintmckenna/polymarketR")
+```
+
+Now can I use it?
+
+```{r}
+library(polymarketR)
+
+# event slug
+event_slug <- "balance-of-power-2026-midterms"
+event <- get_event_by_slug(event_slug)
+
+# all markets for event
+markets <- get_event_markets(event_slug)
+
+# price history
+history <- get_event_prices_history(event_slug, interval = "max", fidelity = 1440)
+history <- history |>
+  left_join(
+    markets |>
+      transmute(
+        market_id = id,
+        volume
+      )
+  ) |>
+  filter(outcome == "Yes")
+```
+
+```{r}
+history |>
+  mutate(
+    date = floor_date(datetime, "day")
+  ) -> history
+```
+
+```{r}
+library(rvest)
+library(tidyverse)
+
+url <- "https://www.chrobinson.com/en-us/resources/insights-and-advisories/trade-tariff-insights/tariff-timeline/"
+
+table <- read_html(url) |>
+  html_element("table") |>   # use html_elements() + [[n]] if multiple tables
+  html_table()
+
+table |>
+  distinct(Date) |>
+  transmute(
+    date = as.Date(Date, format = "%m/%d/%Y"),
+    tariff = 1
+  ) |>
+  complete(
+    date = full_seq(date, period = 1), fill = list(tariff = 0)
+  ) -> tariff_dates
+
+## thanks to Claude, I got this code to make a dummy for the
+## day a tariff is in effect + the 6 days following
+library(slider)
+tariff_dates <- tariff_dates |>
+  mutate(tariff_7 = slide_dbl(tariff, max, .before = 6, .after = 0))
+```
+
+
+```{r}
+history |>
+  left_join(
+    tariff_dates
+  ) -> dt
+
+dt |>
+  filter(
+    groupItemTitle != "Other"
+  ) -> dt
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+tariff_dates |> 
+  filter(date < "2026-08-26") |>
+  arrange(date) |>
+  mutate(cum = cumsum(tariff)) |>
+  ggplot() +
+  aes(date, cum) +
+  geom_step() +
+  geom_text(
+    data = . %>% filter(date == max(date)),
+    aes(label = cum),
+    hjust = -.1,
+    fontface = "bold"
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, 50, by = 10)
+  ) +
+  scale_x_date(
+    date_labels = "%b %Y",
+    date_breaks = "month"
+  ) +
+  labs(
+    title = "52 tariff events enacted since Feb. 2025",
+    subtitle = "Cumulative no. of tariffs enacted, Feb. '25 to Aug. '26\n(Source: C.H. Robinson)",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+saveit(1)
+```
+
+
+```{r}
+#| fig-height: 6
+#| fig-width: 7
+
+dt |>
+  mutate(
+    groupItemTitle = str_wrap(groupItemTitle, 10)
+  ) |>
+  ggplot() +
+  aes(date, price * 100, color = groupItemTitle) +
+  geom_line(
+    linewidth = 1
+  ) +
+  geom_text(
+    data = . %>% filter(date %in% range(date)) %>%
+      mutate(price = round(price, 2)) %>%
+      distinct(date, price, groupItemTitle),
+    aes(
+      label = paste0(
+        price * 100, "\u00A2"
+      )
+    ),
+    fontface = "bold",
+    show.legend = F,
+    hjust = rep(c(1.1, -.1), len = 8)
+  ) +
+  scale_x_date(
+    limits = c("2025-06-30", "2026-09-01") |> as.Date(),
+    date_labels = "%b %Y",
+    date_breaks = "month"
+  ) +
+  ggpal() +
+  labs(
+    title = "Markets bearish on Republicans at midterms",
+    subtitle = "Prices on 'yes' contracts, July '25 to Aug. '26\n(Source: Polymarket)",
+    x = NULL,
+    y = NULL,
+    color = "Contract:",
+    caption = logo
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+saveit(2, 6)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+#| message: false
+#| warning: false
+source(here("_helpers", "my_mean_ci.R"))
+library(estimatr)
+dt |>
+  group_by(groupItemTitle) |>
+  arrange(date) |>
+  mutate(
+    dprice = (price - lag(price, order_by = date)) * 100,
+    tariff = ifelse(tariff_7 == 1, "Yes", "No")
+  ) |>
+  group_split(groupItemTitle) |>
+  map_dfr(
+    ~ lm_robust(dprice ~ tariff, data = .x, se_type = "stata") |>
+      tidy() |>
+      mutate(model = unique(.x$groupItemTitle)) |>
+      slice(2)
+  ) |>
+  splot(
+    x = estimate,
+    xmin = conf.low,
+    xmax = conf.high,
+    y = model,
+    type = "pointrange",
+    vline = 0,
+    title = "New tariffs lower odds of Republican sweep",
+    subtitle = "Difference in price in 7 days following new tariffs",
+    xlab = "OLS estimate with 95% CI\n(each estimate is for a separate model per contract)"
+  )
+saveit(3)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  filter(
+    groupItemTitle == "Republicans Sweep"
+  ) |>
+  arrange(date) |>
+  mutate(
+    dprice = price - lag(price, order_by = date),
+    cum = cumsum(tariff_7),
+    groups1 = cumsum(tariff_7 == 1 & lag(tariff_7, default = 0) == 0),
+    groups0 = cumsum(tariff_7 == 0 & lag(tariff_7, default = 0) == 1),
+    groups = groups1 + groups0
+  ) |>
+  ggplot() +
+  aes(date, dprice) +
+  geom_vline(
+    data = . %>% filter(tariff_7 == 1),
+    aes(xintercept = date),
+    color = "gray"
+  ) +
+  geom_smooth(
+    aes(group = groups),
+    method = "lm",
+    formula = y ~ 1
+  )
+```
+
