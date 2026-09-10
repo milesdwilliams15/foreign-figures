@@ -1,0 +1,156 @@
+---
+title: "Simulating phantoms"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(ggridges)
+library(here)
+library(countrycode)
+library(patchwork)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "orange",
+    "navy",
+    "red",
+    "green3"
+  ),
+  binary = c("gray30", "red"),
+  sequential = c("white", "navy"),
+  diverging = c("steelblue", "gray", "red3")
+)
+source(here::here("_helpers", "splot.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 7) {
+  ggsave(
+    here::here(
+      "112_phantoms",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(peacesciencer)
+create_dyadyears(subset_years = 1816:2014) |>
+  add_cow_mids(keep = "cowmidonset") -> base_line
+
+## the rate
+base_line |>
+  pull(cowmidongoing) |>
+  mean() -> conrate
+
+conrate * 1000 / 5 # ~ 1 in 200
+```
+
+```{r}
+m <- matrix(0, 200, 200)
+
+m[, 1] <- c(1, rep(0, 199))
+m[, 2] <- 1 - m[, 1]
+for(i in 1:198) {
+  i2 <- i + 2
+  m[, i2] <- rbinom(200, 1, 0.25)
+}
+```
+
+## Figures
+
+```{r}
+mixup <- function(m) {
+  reorder <- sample(2:200, replace = F)
+  truth   <- which(reorder == 2)
+  m <- m[, c(1, reorder)]
+  i <- 1
+  repeat {
+    i <- i + 1
+    if(m[1, i] == 0) break
+  }
+  times <- i - 1
+  hit_truth <- truth == reorder[times]
+  tibble(
+    times = times,
+    hit_truth = ifelse(hit_truth, "Yes", "No")
+  )
+}
+
+mixup(m)
+```
+
+```{r}
+set.seed(111)
+1:1000 |>
+  map_df(~mixup(m)) -> out
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+out |>
+  ct(times) |>
+  splot(
+    x = as.factor(times), 
+    y = pct, 
+    label = scales::percent(pct), 
+    type = c("col", "text"), 
+    vjust = -.25,
+    title = 'Too easy to find "explanations" for war',
+    subtitle = "\nDistribution of times it takes to find a factor common to peace\nin 1,000 simulated trials assuming a 1-in-200 chance of war\n"
+  )
+saveit(1)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width:7
+
+out |>
+  ct(hit_truth) |>
+  splot(
+    x = pct,
+    y = " ",
+    fill = hit_truth,
+    label = scales::percent(pct),
+    type = "col",
+    geom_args = list(width = .5)
+  ) +
+  geom_text(
+    aes(x = pct, color = hit_truth),
+    size = 8,
+    hjust = c(-.15, 1.25),
+    show.legend = F,
+    fontface = "bold"
+  ) +
+  ggpal("binary", "fill", guide = guide_legend(reverse = T)) +
+  ggpal("binary", "color", guide = guide_legend(reverse = T)) +
+  labs(
+    title = "In 1% of cases is the 1st explanation the truth",
+    subtitle = "\nPercentage of times the first common factor found to peace is the true\nexplanation in 1,000 simulated trials assuming a 1-in-200 chance of war\n",
+    fill = "Explanation True?"
+  ) +
+  scale_x_continuous(
+    limits = c(-.05, 1.05),
+    breaks = NULL
+  ) +
+  theme(
+    panel.grid.major.y = element_blank()
+  )
+saveit(2, 5, 8)
+```
+
