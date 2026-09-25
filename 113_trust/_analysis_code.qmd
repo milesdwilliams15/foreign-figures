@@ -1,0 +1,268 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(ggridges)
+library(here)
+library(countrycode)
+library(patchwork)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "orange",
+    "navy",
+    "red",
+    "green3"
+  ),
+  binary = c("gray30", "red"),
+  sequential = c("white", "navy"),
+  diverging = c("steelblue", "gray", "red3")
+)
+source(here::here("_helpers", "splot.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 7) {
+  ggsave(
+    here::here(
+      "113_trust",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+## load in theta_summary from: https://dataverse.harvard.edu/file.xhtml?fileId=13439071&version=1.1
+## paper: Introducing the Trust in Government (TrustGov) Dataset: A New Resource for Cross-National Time-Series Trust Research
+load("~/Foreign Figures/foreign-figures/_data/theta_summary.rda") #loads theta_summary
+
+## merge with data on inflation
+library(globalmacrodata)
+gm <- gmd()
+
+## and on democracy
+library(peacesciencer)
+ps <- create_stateyears(
+  system = "gw"
+) |>
+  add_democracy()
+
+## clean and whittle
+theta_summary |>
+  transmute(
+    iso3c = countrycode(country, "country.name", "iso3c"),
+    year,
+    trust = mean,
+    trust_sd = sd
+  ) -> trust_dt
+
+gm |>
+  transmute(
+    iso3c = ISO3,
+    year,
+    inf = infl,
+    gdp = rGDP_USD,
+    gdppc = rGDP_pc_USD
+  ) -> econ_dt
+
+ps |>
+  transmute(
+    iso3c = countrycode(gwcode, "gwn", "iso3c"),
+    year,
+    dem = v2x_polyarchy
+  ) -> demo_dt
+
+## merge
+reduce(
+  list(trust_dt, econ_dt, demo_dt),
+  left_join
+) -> dt
+```
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+ggplot(dt) +
+  aes(year, trust, group = iso3c) +
+  geom_line(
+    aes(color = "All"),
+    linewidth = .1
+  ) +
+  geom_line(
+    data = . %>% filter(iso3c == "USA"),
+    aes(color = "USA"),
+    linewidth = 1
+  ) +
+  geom_smooth(
+    aes(group = 1, color = "Smoothed\nAverage"),
+    method = "gam"
+  ) +
+  ggpal() +
+  labs(
+    title = "Trust in Government Tends to Be Low",
+    subtitle = "Source: Tai (2026)",
+    x = NULL,
+    y = "Trust in Nat'l Gov't",
+    caption = logo,
+    color = NULL
+  )
+saveit(1)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+ggplot(dt) +
+  aes(inf, trust) +
+  geom_point() +
+  geom_smooth(
+    method = "lm"
+  ) +
+  scale_x_log10(
+    labels = scales::comma
+  ) +
+  labs(
+    title = "Inflation Not Correlated with Trust",
+    x = "Inflation\n(Global Macro Database)",
+    y = "Trust",
+    caption = logo
+  )
+saveit(2)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+ggplot(dt) +
+  aes(gdppc, trust) +
+  geom_point() +
+  geom_smooth(
+    method = "lm"
+  ) +
+  scale_x_continuous(
+    labels = scales::dollar
+  ) +
+  labs(
+    title = "Development (Kinda) Correlated with Trust",
+    x = "GDP per capita\n(Global Macro Database)",
+    y = "Trust",
+    caption = logo
+  )
+saveit(3)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+ggplot(dt) +
+  aes(dem, trust) +
+  geom_point() +
+  geom_smooth(
+    method = "lm"
+  ) +
+  labs(
+    title = "Democracy (Negatively) Correlated with Trust",
+    x = "Democracy\n(V-Dem)",
+    y = "Trust",
+    caption = logo
+  )
+saveit(4)
+```
+
+Let's do a regression model.
+
+```{r}
+library(estimatr)
+lm_robust(
+  trust ~ log(inf) + gdppc + dem,
+  data = dt,
+  se_type = "stata",
+  clusters = iso3c
+) -> fit1
+lm_robust(
+  trust ~ log(inf) + gdppc + dem + year + I(year^2) + I(year^3),
+  data = dt,
+  se_type = "stata",
+  clusters = iso3c
+) -> fit2
+lm_robust(
+  trust ~ log(inf) + gdppc + dem,
+  data = dt,
+  fixed_effects = ~ iso3c,
+  se_type = "stata",
+  clusters = iso3c
+) -> fit3
+lm_robust(
+  trust ~ log(inf) + gdppc + dem + year + I(year^2) + I(year^3),
+  data = dt,
+  fixed_effects = ~ iso3c,
+  se_type = "stata",
+  clusters = iso3c
+) -> fit4
+```
+
+```{r}
+bind_rows(
+  tidy(fit1) |> mutate(model = "No; No"),
+  tidy(fit2) |> mutate(model = "Yes; No"),
+  tidy(fit3) |> mutate(model = "No; Yes"),
+  tidy(fit4) |> mutate(model = "Yes; Yes")
+) |>
+  filter(
+    term %in% c("log(inf)", "gdppc", "dem")
+  ) |>
+  ggplot() +
+  aes(
+    estimate,
+    term,
+    xmin = conf.low,
+    xmax = conf.high,
+    color = model
+  ) +
+  geom_pointrange(
+    position = position_dodge(-.5)
+  ) +
+  geom_vline(
+    xintercept = 0,
+    lty = 2
+  ) +
+  ggpal() +
+  labs(
+    title = "Only Democracy Predicts Trust",
+    subtitle = "OLS Estimates with Robust 95% CIs",
+    x = "Difference in Trust",
+    y = NULL,
+    color = "Adjusts for: Time Trend; Country ID",
+    caption = logo
+  ) +
+  scale_x_continuous(
+    breaks = seq(-1, 1, by = .1)
+  ) +
+  scale_y_discrete(
+    labels = c("Democracy", "GDP per capita", "Inflation (log)")
+  )
+saveit(5)
+```
+
