@@ -76,7 +76,8 @@ gm |>
     year,
     inf = infl,
     gdp = rGDP_USD,
-    gdppc = rGDP_pc_USD
+    gdppc = rGDP_pc_USD,
+    pop = pop
   ) -> econ_dt
 
 ps |>
@@ -195,27 +196,33 @@ Let's do a regression model.
 
 ```{r}
 library(estimatr)
+dt |>
+  mutate(
+    linf = scale(log(inf)),
+    lgdppc = scale(log(gdppc)),
+    sdem = scale(dem)
+  ) -> dt
 lm_robust(
-  trust ~ log(inf) + gdppc + dem,
+  trust ~ linf + lgdppc + sdem,
   data = dt,
   se_type = "stata",
   clusters = iso3c
 ) -> fit1
 lm_robust(
-  trust ~ log(inf) + gdppc + dem + year + I(year^2) + I(year^3),
+  trust ~ linf + lgdppc + sdem + year + I(year^2) + I(year^3),
   data = dt,
   se_type = "stata",
   clusters = iso3c
 ) -> fit2
 lm_robust(
-  trust ~ log(inf) + gdppc + dem,
+  trust ~ linf + lgdppc + sdem,
   data = dt,
   fixed_effects = ~ iso3c,
   se_type = "stata",
   clusters = iso3c
 ) -> fit3
 lm_robust(
-  trust ~ log(inf) + gdppc + dem + year + I(year^2) + I(year^3),
+  trust ~ linf + lgdppc + sdem + year + I(year^2) + I(year^3),
   data = dt,
   fixed_effects = ~ iso3c,
   se_type = "stata",
@@ -231,7 +238,7 @@ bind_rows(
   tidy(fit4) |> mutate(model = "Yes; Yes")
 ) |>
   filter(
-    term %in% c("log(inf)", "gdppc", "dem")
+    term %in% c("linf", "lgdppc", "sdem")
   ) |>
   ggplot() +
   aes(
@@ -242,7 +249,8 @@ bind_rows(
     color = model
   ) +
   geom_pointrange(
-    position = position_dodge(-.5)
+    position = position_dodge(-.5),
+    size = .1
   ) +
   geom_vline(
     xintercept = 0,
@@ -250,7 +258,7 @@ bind_rows(
   ) +
   ggpal() +
   labs(
-    title = "Only Democracy Predicts Trust",
+    title = "Democracy & Economy Predict Trust",
     subtitle = "OLS Estimates with Robust 95% CIs",
     x = "Difference in Trust",
     y = NULL,
@@ -261,8 +269,19 @@ bind_rows(
     breaks = seq(-1, 1, by = .1)
   ) +
   scale_y_discrete(
-    labels = c("Democracy", "GDP per capita", "Inflation (log)")
+    labels = c("GDP per capita (log)", "Inflation (log)", "Democracy")
   )
 saveit(5)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  group_by(iso3c) |>
+  summarize(
+    trust = max(trust)
+  )
 ```
 
