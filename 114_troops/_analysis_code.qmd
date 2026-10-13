@@ -1,0 +1,296 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(ggridges)
+library(here)
+library(countrycode)
+library(patchwork)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "orange",
+    "navy",
+    "red",
+    "green3"
+  ),
+  binary = c("gray30", "red"),
+  sequential = c("white", "navy"),
+  diverging = c("steelblue", "gray", "red3")
+)
+source(here::here("_helpers", "splot.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 7) {
+  ggsave(
+    here::here(
+      "114_troops",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(troopdata)
+library(rnaturalearth)
+troop_dt <- get_troopdata(civilians = T)
+map_dt   <- ne_countries()
+map_dt |>
+  mutate(
+    ccode = countrycode(sovereignt, "country.name", "cown")
+  ) -> map_dt
+
+full_join(
+  map_dt,
+  troop_dt,
+  by = "ccode"
+) -> dt
+```
+
+## Figures
+
+My train of thought:
+
+1. I wanted to look at the distribution of US troop deployments.
+2. I noticed that Iraq = 0 in 2025. WFT?
+3. Checked out troopdata reference at DMDC (defense manpower data center) and found that any deployments that are classified, temporary, contingent are not reported. Some extra sleuthing confirmed that the troops in Iraq that were withdrawn were there on a contingent basis (supporting training). They therefore don't register. The last year there were full-time active duty troops in Iraq was 2022.
+4. Full-time active duty troops haven't left the Middle East.
+5. There's no sign of an aberrant decline in overseas deployments under Trump as of 2025. 
+6. Pulling temporary and contingent forces out of Iraq isn't a nothing burger, but in context it's not terribly significant. No full-time active duty service members had been in Iraq for a few years, but they remain stationed in the region.
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  filter(year == 2025) |>
+  mutate(
+    troop_lev = frcode(
+      troops_ad == 0 | is.na(troops_ad) ~ "None",
+      troops_ad %in% 1:99 ~ "1-99",
+      troops_ad %in% 100:999 ~ "100-999",
+      troops_ad %in% 1000:4999 ~ "1,000-4,999",
+      troops_ad >= 5000 ~ "> 5,000"
+    )
+  ) |> 
+  ggplot() +
+  aes(fill = troop_lev) +
+  geom_sf() +
+  ggpal("sequential", "fill", ordinal = T, levels = 5) +
+  labs(
+    title = "US Troop Footprint Is Everywhere",
+    subtitle = "{troopdata}: Total active duty troops, 2025",
+    caption = logo,
+    fill = NULL
+  ) +
+  scale_x_continuous(
+    breaks = NULL
+  ) +
+  scale_y_continuous(
+    breaks = NULL
+  )
+saveit(1)
+```
+
+```{r}
+troop_dt |>
+  filter(year == 2025, iso3c == "IRQ")
+```
+
+```{r}
+#| fig-height: 5
+#| fig-wdith: 7
+
+troop_dt |>
+  filter(iso3c == "IRQ", year >= 2000) |>
+  ggplot() +
+  aes(year, troops_ad) +
+  geom_line(color = "navy") +
+  geom_area(fill = "navy") +
+  scale_y_continuous(
+    labels = scales::comma
+  ) +
+  labs(
+    title = "No Full-time Active Duty Troops in Iraq Since 2022",
+    subtitle = "{troopdata}: Total active duty troops in Iraq, 2000-2025",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(2, 5, 8)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-wdith: 8
+
+troop_dt |>
+  filter(iso3c == "IRQ", year >= 2000) |>
+  ggplot() +
+  aes(year, total_civilian) +
+  geom_line(color = "navy") +
+  geom_area(fill = "navy") +
+  scale_y_continuous(
+    labels = scales::comma
+  ) +
+  labs(
+    title = "No Full-time DoD Civilians in Iraq Since 2017",
+    subtitle = "{troopdata}: Total DoD civilians in Iraq, 2000-2025",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(3, 5, 8)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-wdith: 7
+
+troop_dt |>
+  filter(iso3c != "USA") |>
+  group_by(year) |>
+  summarize(
+    troops_ad = sum(troops_ad, na.rm = T)
+  ) |>
+  ggplot() +
+  aes(year, troops_ad) +
+  geom_area(fill = "navy") +
+  geom_label_repel(
+    data = . %>% filter(year %in% c(1950, 1953, 1969, 2025)),
+    aes(label = paste0(round(troops_ad / 1e06, 2), " million\n(",year,")")),
+    nudge_y = 1e06,
+    color = "orange3",
+    fontface = "bold",
+    family = "mono"
+  ) +
+  scale_x_continuous(
+    breaks = seq(1950, 2025, by = 5)
+  ) +
+  scale_y_continuous(
+    labels = ~ .x / 1e06,
+    breaks = seq(0, 4e06, by = 1e06)
+  ) +
+  labs(
+    title = "No Aberrant Decline in Deployed Troops Under Trump",
+    subtitle = "{troopdata}: Total active duty troops abroad, 1950-2025",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+saveit(4, 5, 8)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  filter(year == 2025) |>
+  filter(region == "Middle East & North Africa") |>
+  mutate(
+    troop_lev = frcode(
+      troops_ad == 0 | is.na(troops_ad) ~ "None",
+      troops_ad %in% 1:99 ~ "1-99",
+      troops_ad %in% 100:999 ~ "100-999",
+      troops_ad %in% 1000:4999 ~ "1,000-4,999",
+      troops_ad >= 5000 ~ "> 5,000"
+    )
+  ) |> 
+  ggplot() +
+  aes(fill = troop_lev) +
+  geom_sf() +
+  geom_sf_text(
+    data = . %>% filter(iso3c == "IRQ"),
+    aes(label = "Iraq"),
+    fontface = "bold"
+  ) +
+  ggpal("sequential", "fill", ordinal = T, levels = 5) +
+  labs(
+    title = "Where Are the Troops in Iraq??",
+    subtitle = "{troopdata}: Total active duty troops, 2025,\nin the Middle East & North Africa",
+    caption = logo,
+    fill = NULL,
+    x = NULL,
+    y = NULL
+  ) +
+  scale_x_continuous(
+    breaks = NULL
+  ) +
+  scale_y_continuous(
+    breaks = NULL
+  )
+saveit(5)
+```
+
+
+
+## Some exploratory analysis
+
+```{r}
+troop_us <- get_troopdata(state_data = T)
+```
+
+```{r}
+troop_us |>
+  group_by(year) |>
+  summarize(
+    troops_ad = sum(troops_ad)
+  )
+```
+
+```{r}
+us_map_dt <- usmap::us_map("states")
+full_join(
+  us_map_dt |> mutate(fips = as.numeric(fips)),
+  troop_us |> filter(year > 2023),
+  by = c("fips" = "fipscode")
+) |>
+  drop_na() |>
+  ggplot() +
+  aes(fill = troops_ad) +
+  geom_sf() +
+  facet_wrap(~ year)
+```
+
+```{r}
+full_join(
+  us_map_dt |> mutate(fips = as.numeric(fips)),
+  troop_us |> filter(year > 2023) |>
+    group_by(fipscode) |>
+    summarize(
+      troops_ad = (troops_ad[year == 2025] - troops_ad[year == 2024]) / 
+        troops_ad[year == 2024]
+    ),
+  by = c("fips" = "fipscode")
+) |>
+  drop_na() |>
+  ggplot() +
+  aes(fill = troops_ad) +
+  geom_sf() +
+  ggpal(
+    "diverging",
+    "fill"
+  )
+```
+
