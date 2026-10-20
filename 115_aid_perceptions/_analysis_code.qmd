@@ -1,0 +1,309 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(ggridges)
+library(here)
+library(countrycode)
+library(patchwork)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "orange",
+    "navy",
+    "red",
+    "green3"
+  ),
+  binary = c("gray30", "red"),
+  sequential = c("white", "navy"),
+  diverging = c("steelblue", "gray", "red3")
+)
+source(here::here("_helpers", "splot.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 7) {
+  ggsave(
+    here::here(
+      "115_aid_perceptions",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+dt <- read_csv(
+  here("_data", "verasight_aid_2026", "2026-153_client.csv")
+)
+```
+
+clean this up!
+
+```{r}
+dt |>
+  transmute(
+    ## main outcome
+    aid = frcode(
+      tech_3 == 5 ~ "Much worse",
+      tech_3 == 4 ~ "Somewhat worse",
+      tech_3 == 3 ~ "No real change",
+      tech_3 == 2 ~ "Somewhat better",
+      tech_3 == 1 ~ "Much better",
+      tech_3 == 6 ~ "Don't know"
+    ),
+    
+    ## demographics
+    age = vs_age,
+    edu = vs_education,
+    gen = vs_gender,
+    inc = vs_income,
+    met = vs_metro,
+    race = vs_race,
+    his = vs_hispanic,
+    party = vs_pid_base,
+    lean = vs_pid_lean,
+    voter = vs_vote_2024,
+    vote = vs_votechoice_2024,
+    
+    ## survey weight
+    wt = weight
+  ) |> 
+  drop_na(aid) -> dt
+```
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+dt |>
+  ct(aid, wt, show_na = F) |>
+  splot(
+    aid, pct, label = scales::percent(pct),
+    type = c("col", "text"),
+    xangle = T,
+    vjust = 1.3,
+    title = "A majority think aid cuts hurt US image",
+    subtitle = str_wrap(
+      "In 2025, the United States significantly cut its foreign aid spending, while China has continued its own foreign aid to fill some of that gap. What impact do you think this had on the image of the United States in the world?",
+      80
+    )
+  ) +
+  theme(
+    plot.subtitle = element_text(size = 10)
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  )
+saveit(1)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+dt |>
+  mutate(
+    voter = ifelse(
+      voter == "I voted", "Voters", "Non-voters"
+    ),
+    aid = frcode(
+      str_detect(aid, "worse") ~ "Worse",
+      aid == "No real change" ~ "No real change",
+      str_detect(aid, "better") ~ "Better",
+      TRUE ~ "Don't know"
+    )
+  ) |>
+  group_by(voter) |>
+  ct(aid, wt, show_na = F) |>
+  ggplot() +
+  aes(aid, pct, label = scales::percent(pct), fill = voter) +
+  geom_col(position = "dodge") +
+  geom_text(    
+    vjust = 1.3,
+    size = 3,
+    position = position_dodge(1),
+    fontface = "bold",
+    show.legend = F
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  ggpal(aes = "fill") +
+  labs(
+    title = "Voters more apt to believe in positive effect",
+    subtitle = str_wrap(
+      "In 2025, the United States significantly cut its foreign aid spending, while China has continued its own foreign aid to fill some of that gap. What impact do you think this had on the image of the United States in the world?",
+      80
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    fill = NULL
+  ) +
+  theme(
+    plot.subtitle = element_text(size = 10),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = c(.8, .8)
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  )
+saveit(2)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  mutate(
+    aid = frcode(
+      str_detect(aid, "worse") ~ "Worse",
+      aid == "No real change" ~ "No real change",
+      str_detect(aid, "better") ~ "Better",
+      TRUE ~ "Don't know"
+    )
+  ) |>
+  filter(voter == "I voted") |>
+  filter(!str_detect(party, "Other")) |>
+  group_by(party) |>
+  ct(aid, wt) |>
+  ggplot() +
+  aes(aid, pct, fill = party) +
+  geom_col(position = "dodge") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.subtitle = element_text(size = 10),
+    legend.position = c(.7, .8)
+  ) +
+  labs(
+    title = "GOP voters least convinced US image is worse",
+    subtitle = str_wrap(
+      "In 2025, the United States significantly cut its foreign aid spending, while China has continued its own foreign aid to fill some of that gap. What impact do you think this had on the image of the United States in the world?",
+      80
+    ),
+    x = NULL,
+    y = NULL,
+    caption = logo,
+    fill = NULL
+  ) +
+  ggpal(
+    "diverging",
+    "fill",
+    ordinal = T,
+    levels = 3
+  ) +
+  scale_y_continuous(
+    labels = scales::percent,
+    breaks = seq(0, 1, by = .1)
+  )
+saveit(3)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+dt |>
+  filter(voter == "I voted") |>
+  mutate(
+    aid = str_detect(aid, "better")+0,
+    edu = (
+      edu %in% c("4-year or bachelor degree",
+                 "Post-graduate degree")
+    ) + 0,
+    inc = (
+      inc %in% c("$150,000 to under $200,000",
+                 "More than $200,000")
+    ) + 0,
+    white = (race == "White") + 0,
+    male = (gen == "Male") + 0,
+    trump = (vote == "Donald Trump") + 0
+  ) |>
+  glm(
+    aid ~ age + edu + male + inc + white +
+      party,
+    data = _,
+    family = binomial,
+    weights = wt
+  ) |>
+  broom::tidy() |>
+  mutate(
+    lo = estimate - 1.96 * std.error,
+    hi = estimate + 1.96 * std.error
+  ) |>
+  filter(term != "(Intercept)") |>
+  ggplot() +
+  aes(estimate, term, xmin = lo, xmax = hi) +
+  geom_pointrange() +
+  geom_vline(
+    xintercept = 0
+  ) +
+  labs(
+    title = "Trump and non-white voters think aid cuts\nhelped US image",
+    subtitle = "Logit model estimates predicting odds that a respondent thinks aid cuts improved America's image (among voters only)" |>
+      str_wrap(80),
+    x = "Estimate and 95% CI",
+    y = NULL,
+    caption = logo
+  ) +
+  theme(
+    plot.subtitle = element_text(size = 10)
+  ) +
+  scale_y_discrete(
+    labels = c(
+      "Age",
+      "College Graduate +",
+      "> $150,000 Income",
+      "Male",
+      "Independent",
+      "Other party",
+      "Republican",
+      "White"
+    )
+  )
+saveit(4)
+```
+
+```{r}
+dt |>
+  filter(voter == "I voted") |>
+  mutate(
+    aid = str_detect(aid, "better")+0,
+    edu = (
+      edu %in% c("4-year or bachelor degree",
+                 "Post-graduate degree")
+    ) + 0,
+    inc = (
+      inc %in% c("$150,000 to under $200,000",
+                 "More than $200,000")
+    ) + 0,
+    white = (race == "White") + 0,
+    male = (gen == "Male") + 0,
+    trump = (vote == "Donald Trump") + 0
+  ) |>
+  glm(
+    aid ~ age + edu + male + inc + white *
+      party,
+    data = _,
+    family = binomial,
+    weights = wt
+  ) |>
+  sjPlot::plot_model(
+    "pred", terms = c("white", "party")
+  )
+```
+
