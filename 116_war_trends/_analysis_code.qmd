@@ -1,0 +1,149 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(ggridges)
+library(here)
+library(countrycode)
+library(patchwork)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "orange",
+    "navy",
+    "red",
+    "green3"
+  ),
+  binary = c("gray30", "red"),
+  sequential = c("white", "navy"),
+  diverging = c("steelblue", "gray", "red3")
+)
+source(here::here("_helpers", "splot.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 7) {
+  ggsave(
+    here::here(
+      "116_war_trends",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+## Data
+
+```{r}
+library(peacesciencer)
+source(here("_helpers", "dyadify_ucdp.R"))
+read_csv(
+  here("_data", "ucdp-dyadic-261-csv", "Dyadic_v26_1.csv")
+) -> ac_dt
+ac_dt |>
+  dyadify_ucdp() -> dyadic_dt
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+dyadic_dt |>
+  filter(gwcode1 == 2) |>
+  group_by(year) |>
+  summarize(total = n_distinct(conflict_id)) |>
+  ggplot() +
+  aes(year, total) +
+  geom_col(fill = "gray") +
+  geom_col(
+    data = . %>% filter(year %in% 2017:2020),
+    fill = "orange3"
+  ) +
+  geom_col(
+    data = . %>% filter(year == 2025),
+    fill = "navy"
+  ) +
+  geom_text_repel(
+    data = . %>% filter(year == 2025),
+    aes(label = "Trump 2.0"),
+    nudge_x = -10,
+    nudge_y = 0,
+    family = "mono",
+    fontface = "bold",
+    color = "navy"
+  ) +
+  geom_text_repel(
+    data = . %>% filter(year == 2019),
+    aes(label = "Trump 1.0"),
+    nudge_x = -10,
+    nudge_y = 0,
+    family = "mono",
+    fontface = "bold",
+    color = "orange3"
+  ) +
+  scale_x_continuous(
+    breaks = seq(1945, 2025, by = 10)
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust =1),
+    plot.subtitle = element_text(size = 10)
+  ) +
+  labs(
+    title = "U.S. involvement in conflict back up in 2025",
+    subtitle = "Count of armed conflicts with >24 battle deaths with U.S. troops involved",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  )
+saveit(1)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+dyadic_dt |>
+  group_by(year) |>
+  summarize(
+    n = n_distinct(conflict_id)
+  ) |>
+  ggplot() +
+  aes(year, n) +
+  geom_col(
+    fill = "gray"
+  ) +
+  geom_col(
+    data = . %>% filter(year == 2025),
+    fill = "navy"
+  ) +
+  geom_text_repel(
+    data = . %>% filter(year == 2025),
+    label = "65 in 2025",
+    color = "navy",
+    nudge_x = -10,
+    nudge_y = 0,
+    family = "mono",
+    fontface = "bold"
+  ) +
+  labs(
+    title = "2025 was record-setting",
+    subtitle = "Total armed conflicts with >24 annual battle deaths, 1946-2025",
+    x = NULL,
+    y = NULL,
+    caption = logo
+  ) 
+saveit(2)
+```
+
+
