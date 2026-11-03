@@ -1,0 +1,156 @@
+---
+title: "_analysis_code"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(ggridges)
+library(here)
+library(countrycode)
+library(patchwork)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "orange",
+    "navy",
+    "red",
+    "green3"
+  ),
+  binary = c("navy", "orange"),
+  sequential = c("white", "navy"),
+  diverging = c("steelblue", "gray", "red3")
+)
+source(here::here("_helpers", "splot.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 7) {
+  ggsave(
+    here::here(
+      "117_war_trends_comparison",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+## Data
+
+```{r}
+library(peacesciencer)
+source("https://raw.githubusercontent.com/milesdwilliams15/Teaching/refs/heads/main/DPR%20101/Data/_peacesciencer_extras_for_101.R")
+# source loads:
+# add_icd_mics() --- works like add_cow_mids()
+# add_opportunity() --- adds prd and opportunity
+# tercile() --- cuts a continuous var into terciles with labels
+create_dyadyears(
+  directed = F,
+  subset_years = 1816:2014
+) |>
+  add_cow_mids() |>
+  add_icd_mics() |>
+  add_opportunity() |>
+  select(
+    # keep identifiers and time
+    ccode1:year,
+    # keep relevant COW conflict measures
+    cowmidonset, cowmidongoing, hostlev,
+    # keep relevant ICD conflict measures
+    icdmiconset, icdmicongoing, icdmichostlev,
+    # keep measures of relevance
+    prd, opportunity
+) -> dt
+```
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  group_by(year) |>
+  summarize(
+    "Total MID Onsets b/t Country Pairs" = sum(cowmidonset),
+    "Total MIC Onsets b/t Country Pairs" = sum(icdmiconset)
+  ) |>
+  pivot_longer(2:3) |>
+  ggplot() +
+  aes(year, value, color = name) +
+  geom_line(
+    linewidth = 1
+  ) +
+  ggpal("binary") +
+  labs(
+    title = "MID and MIC datasets don't perfectly align",
+    subtitle = "Count of country pairs on opposite sides of new conflict onsets",
+    captiopn = logo,
+    x = NULL,
+    y = NULL,
+    color = NULL
+  )
+saveit(1)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  group_by(year) |>
+  summarize(
+    "MIDs per Dyads" = mean(cowmidonset),
+    "MIDs per PRDs"= mean(cowmidonset[prd == 1]),
+    "MIDs per Opportunities" = sum(cowmidonset) / sum(opportunity),
+    "MICs per Dyads" = mean(icdmiconset),
+    "MICs per PRDs" = mean(icdmiconset[prd == 1]),
+    "MICs per Opportunities" = sum(icdmiconset) / sum(opportunity)
+  ) |>
+  pivot_longer(-year) |>
+  ggplot() +
+  aes(year, value) +
+  geom_line(
+    color = "gray"
+  ) +
+  stat_smooth(
+    data = . %>%
+      filter(year < 1939 | year > 1945),
+    aes(group = year > 1945),
+    method = "lm",
+    formula = y ~ 1,
+    color = "red3",
+    fontface = "bold.italic",
+    level = .84
+  ) +
+  geom_textvline(
+    xintercept = (1939 + 1945) / 2,
+    label = "WWII",
+    color = "steelblue",
+    hjust = 0.8,
+    linewidth = 4,
+    fontface = "bold",
+    vjust = 2,
+    alpha = .4
+  ) +
+  facet_wrap(~ name, ncol = 3, scales = "free_y") +
+  labs(
+    title = "The denominator still matters more",
+    subtitle = "Rate of country pairs on opposite sides of new conflict onsets",
+    captiopn = logo,
+    x = NULL,
+    y = NULL
+  ) +
+  scale_y_continuous(
+    labels = scales::percent
+  )
+saveit(2)
+```
