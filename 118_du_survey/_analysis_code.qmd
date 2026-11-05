@@ -1,0 +1,235 @@
+---
+title: "_analysis_code"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(ggridges)
+library(here)
+library(countrycode)
+library(patchwork)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "orange",
+    "navy",
+    "red",
+    "green3"
+  ),
+  binary = c("navy", "orange"),
+  sequential = c("white", "navy"),
+  diverging = c("steelblue", "gray30", "red3")
+)
+source(here::here("_helpers", "splot.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 7) {
+  ggsave(
+    here::here(
+      "118_du_survey",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(googlesheets4)
+gs4_deauth()
+range_speedread(
+  "https://docs.google.com/spreadsheets/d/1IEKyKbBL1S8FceOcPBrpbuGNV9hzpbI_J58mFHL7478/edit?usp=drive_link"
+) -> raw_dt
+```
+
+```{r}
+raw_dt |>
+  rowwise() |>
+  mutate(
+    full_q = sum(
+      c_across(c(q237, q238, q239)),
+      na.rm = T
+    )
+  ) |>
+  ungroup() |>
+  transmute(
+    id = row,
+    tr = frcode(
+      foreignaidexperiment_do_q237 == 1 ~ "Control",
+      foreignaidexperiment_do_q238 == 1 ~ "Chinese\nCompetition",
+      foreignaidexperiment_do_q239 == 1 ~ "Government\nWaste"
+    ),
+    num_scale = (5 - full_q) - 2,
+    cat_scale = frcode(
+      full_q == 5 ~ "Much\nworse",
+      full_q == 4 ~ "Somewhat\nworse",
+      full_q == 3 ~ "No change",
+      full_q == 2 ~ "Somewhat\nbetter",
+      full_q == 1 ~ "Much\nbetter"
+    ),
+    pid = frcode(
+      q3 %in% 1:3 ~ "Democrat",
+      q3 == 4 ~ "Independent",
+      q3 %in% 5:7 ~ "Republican",
+      q3 == 8 ~ "Other"
+    ),
+    wgt
+  ) |>
+  mutate(
+    num_scale = ifelse(num_scale == 3, NA, num_scale)
+  ) -> dt
+```
+
+
+## Figures
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  ct(cat_scale, wt = wgt, show_na = F) |>
+  splot(
+    cat_scale, pct,
+    type = "col",
+    xangle = T,
+    yscale = scale_y_continuous(
+      labels = scales::percent,
+      breaks = seq(0, 1, by = .05)
+    ),
+    title = "Denisonians Think Aid Cuts Hurt U.S. Image",
+    subtitle = "Oct. '26 survey: What change did aid cuts make to U.S. image?"
+  )
+saveit(1)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  ct(pid, wt = wgt, show_na = F) |>
+  splot(
+    pid, pct,
+    type = "col",
+    xangle = T,
+    yscale = scale_y_continuous(
+      labels = scales::percent,
+      breaks = seq(0, 1, by = .05)
+    ),
+    title = "Most Denisonians Identify as Democrats",
+    subtitle = "Oct. '26 survey: Party ID"
+  )
+saveit(2)
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  group_by(pid) |>
+  ct(cat_scale, wt = wgt, show_na = F, cum = T) |>
+  ggplot() +
+  aes(pid, pct, fill = cat_scale) +
+  geom_col() +
+  geom_text(
+    data = . %>% filter(pct > 0.1),
+    aes(label = scales::percent(pct),
+        y = 1 - cum_pct),
+    fontface = "bold",
+    vjust = -.5
+  ) +
+  ggpal(
+    "sequential",
+    "fill",
+    ordinal = T,
+    levels = 5
+  ) +
+  scale_y_continuous(
+    breaks = NULL
+  ) +
+  labs(
+    title = "All Partisans Think Aid Cuts Hurt U.S. Image\n(But Democrats Felt Most Strongly)",
+    subtitle = "Oct. '26 survey: Party ID by Aid Cut Attitudes",
+    x = NULL,
+    y = NULL,
+    fill = NULL,
+    caption = logo
+  )
+saveit(3)
+```
+
+
+```{r}
+#| fig-height: 3
+#| fig-width: 7
+library(estimatr)
+library(sjPlot)
+lm_robust(
+  num_scale ~ tr,
+  data = dt
+) |>
+  plot_model(
+    type = "pred",
+    terms = "tr",
+    ci.lvl = .84
+  ) +
+  labs(
+    title = "Treatment Frames Improved Attitudes",
+    subtitle = "OLS Predictions with HC2 84% CIs",
+    x = NULL,
+    y = "Predicted Attitude Score (-2:2 scale)",
+    caption = logo
+  ) +
+  coord_flip()
+saveit(4, 3)
+```
+
+```{r}
+#| fig-height: 3
+#| fig-width: 7
+library(estimatr)
+library(sjPlot)
+lm_robust(
+  num_scale ~ tr * pid,
+  data = dt |> filter(pid != "Other")
+) |>
+  plot_model(
+    type = "pred",
+    terms = c("tr", "pid"),
+    ci.lvl = .84
+  ) +
+  labs(
+    title = "Treatment Frames Improved (Dems') Attitudes",
+    subtitle = "OLS Predictions with HC2 84% CIs",
+    x = NULL,
+    y = "Predicted Attitude Score (-2:2 scale)",
+    caption = logo,
+    color = NULL
+  ) +
+  coord_flip() +
+  theme(
+    legend.position = c(.5, .7)
+  ) +
+  ggpal(
+    "diverging",
+    ordinal = T,
+    levels = 3
+  )
+saveit(5, 3)
+```
+

@@ -21,6 +21,8 @@ splot <- function(data, ...,
                   pal = "qualitative",
                   aes = "color",
                   xangle = FALSE,
+                  xscale = NULL,
+                  yscale = NULL,
                   method = "gam", formula = y ~ s(x),
                   se = TRUE,
                   facet = NULL,
@@ -50,6 +52,10 @@ splot <- function(data, ...,
   
   ## facet the plot
   if (!is.null(facet)) p <- p + facet_wrap(facet, scales = scales, ncol = facet_col)
+  
+  ## update x and y continuous scales
+  if (!is.null(xscale)) p <- p + xscale
+  if (!is.null(yscale)) p <- p + yscale
   
   ## return plot with custom theme and labels
   p <- p + 
