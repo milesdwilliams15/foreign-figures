@@ -1,0 +1,216 @@
+---
+title: "Untitled"
+format: html
+---
+
+## Setup
+
+```{r packages + settings}
+library(tidyverse)
+library(socsci)
+library(geomtextpath)
+library(coolorrr)
+library(ggrepel)
+library(ggridges)
+library(here)
+library(countrycode)
+library(patchwork)
+set_palette(
+  qualitative = c(
+    "steelblue",
+    "orange",
+    "navy",
+    "red",
+    "green3"
+  ),
+  binary = c("navy", "orange"),
+  sequential = c("white", "navy"),
+  diverging = c("steelblue", "gray30", "red3")
+)
+source(here::here("_helpers", "splot.R"))
+theme_set(my_theme())
+saveit <- function(num = 1, ht = 5, wd = 7) {
+  ggsave(
+    here::here(
+      "119_second_image_rev",
+      paste0("fig", num, ".png")
+    ),
+    height = ht,
+    width = wd,
+    dpi = 500
+  )
+}
+```
+
+
+## Data
+
+```{r}
+library(peacesciencer)
+library(globalmacrodata)
+library(inflateR)
+```
+
+```{r}
+## code to load, clean, and merge the data
+create_dyadyears(
+  subset_years = 1960:2014
+) |>
+  add_cow_mids() -> ddy
+
+ddy |>
+  group_by(ccode1, year) |>
+  summarize(
+    mids_n = sum(cowmidongoing),
+    mids_p = mean(cowmidongoing)
+  ) |>
+  ungroup() |>
+  rename(ccode = ccode1) -> dt
+
+create_stateyears() |>
+  add_cow_trade() -> trd_dt
+
+dt |>
+  left_join(trd_dt) -> dt
+
+gmd() -> gm_dt
+
+gm_dt |>
+  transmute(
+    ccode = countrycode(ISO3, "iso3c", "cown"),
+    year,
+    infl,
+    rGDP_USD,
+    pop
+  ) -> gm_dt
+
+dt |>
+  left_join(gm_dt) -> dt
+```
+
+```{r}
+tibble(
+  year = 1960:2014,
+  k = map_dbl(
+      year, ~ adjust_inflation(
+      1, .x, "USD", to_year = 2015
+    )
+  )
+) -> infl_dt
+
+dt |>
+  left_join(infl_dt) -> dt
+
+dt |>
+  mutate(
+    imports = k * imports,
+    exports = k * exports
+  ) -> dt
+```
+
+
+
+```{r}
+dt |>
+  group_by(ccode) |>
+  mutate(
+    imports_lag = lag(imports, order_by = year),
+    exports_lag = lag(exports, order_by = year)
+  ) |>
+  ungroup() |>
+  mutate(
+    imports_d = (imports - imports_lag)/imports_lag,
+    exports_d = (exports - exports_lag)/exports_lag
+  ) -> dt
+```
+
+
+
+## Analysis
+
+```{r}
+library(estimatr)
+lm_robust(
+  asinh(infl) ~ asinh(mids_n) + asinh(imports_lag + exports_lag),
+  data = dt,
+  se_type = "stata",
+  fixed_effects = ~ ccode,
+  clusters = ccode
+)
+```
+
+
+
+```{r}
+library(lmtest)
+library(sandwich)
+dt |>
+  mutate(
+    mids = ifelse(mids_n > 0, "Yes", "No") |> as.factor(),
+    infl = asinh(infl),
+    trade = asinh(imports_lag + exports_lag)
+  ) |>
+  lm(
+    infl ~ mids_n + trade + 
+      as.factor(ccode), 
+    data = _
+  ) %>%
+  coeftest(
+    vcov. = vcovBS(x = .)
+  )
+```
+
+
+```{r}
+dt |>
+  mutate(
+    mids = ifelse(mids_n > 0, "Yes", "No") |> as.factor(),
+    infl = asinh(infl),
+    trade_lag = imports_lag + exports_lag,
+    trade = imports + exports
+  ) -> dt
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+dt |>
+  group_by(mids) |>
+  mutate(infl = sinh(infl)) |>
+  mean_ci(infl, ci = .84) |>
+  splot(
+    mids, mean, ymin = lower, ymax = upper,
+    type = "pointrange",
+    title = "Int'l Conflict = Higher Inflation",
+    subtitle = "Avg. % Inflation, 1960-2014, by MID involvement",
+    xlab = "Involved in a Militarized Interstate Dispute?",
+    ylab = "% Inflation (84% CIs)"
+  ) 
+saveit(1)
+```
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+ggplot(dt) +
+  aes(trade / 1e03, sinh(infl)) +
+  geom_smooth(color = "navy", method = "lm", alpha = .4, formula = y ~ poly(x, 3)) +
+  labs(
+    title = "More Trade = Lower Inflation",
+    subtitle = "Smoothed avg. % inflation by trade",
+    x = "Log-10 of Total Trade (Billions of 2015 USD)",
+    y = "% Inflation",
+    caption = logo
+  ) +
+  scale_x_log10(
+    n.breaks = 6,
+    labels = scales::dollar
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+saveit(2)
+```
+

@@ -78,6 +78,11 @@ raw_dt |>
       full_q == 2 ~ "Somewhat\nbetter",
       full_q == 1 ~ "Much\nbetter"
     ),
+    cat_scale3 = frcode(
+      full_q %in% 4:5 ~ "Worse",
+      full_q == 3 ~ "No change",
+      full_q %in% 1:2 ~ "Better"
+    ),
     pid = frcode(
       q3 %in% 1:3 ~ "Democrat",
       q3 == 4 ~ "Independent",
@@ -232,4 +237,158 @@ lm_robust(
   )
 saveit(5, 3)
 ```
+
+
+
+## Figures for 127
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+coolorrr::set_theme()
+dt |>
+  ct(cat_scale, wt = wgt, show_na = F) |>
+  ggplot() +
+  aes(x = cat_scale, y = pct) +
+  geom_col(fill = "gray") +
+  scale_y_continuous(
+    labels = scales::percent,
+    breaks = seq(0, 1, by = .05)
+  ) +
+  labs(
+    title = "Denisonians Think Aid Cuts Hurt America's Image",
+    subtitle = "Oct. '26 survey: What change did aid cuts make to America's image?",
+    x = NULL,
+    y = NULL
+  ) +
+  theme(
+    panel.grid.major.x = element_blank()
+  )
+
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  ct(pid, wt = wgt, show_na = F) |>
+  ggplot() +
+  aes(pid, pct) +
+  geom_col(fill = "gray") +
+  scale_y_continuous(
+    labels = scales::percent,
+    breaks = seq(0, 1, by = .05)
+  ) +
+  theme(
+    panel.grid.major.x = element_blank()
+  ) +
+  labs(
+    title = "Most Denisonians Identify as Democrats",
+    subtitle = "Oct. '26 survey: Party ID",
+    x = NULL,
+    y = NULL
+  )
+ 
+```
+
+
+```{r}
+#| fig-height: 5
+#| fig-width: 7
+
+dt |>
+  group_by(pid) |>
+  ct(cat_scale, wt = wgt, show_na = F, cum = T) |>
+  ggplot() +
+  aes(pid, pct, fill = cat_scale) +
+  geom_col() +
+  geom_text(
+    data = . %>% filter(pct > 0.1),
+    aes(label = scales::percent(pct),
+        y = 1 - cum_pct),
+    fontface = "bold",
+    vjust = -.5
+  ) +
+  ggpal(
+    "sequential",
+    "fill",
+    ordinal = T,
+    levels = 5
+  ) +
+  scale_y_continuous(
+    breaks = NULL
+  ) +
+  labs(
+    title = "All Partisans Think Aid Cuts Hurt America's Image\n(Democrats Most of All)",
+    subtitle = "Oct. '26 survey: Aid Cut Attitudes by Party ID",
+    x = NULL,
+    y = NULL,
+    fill = "What change did aid cuts make to America's image?"
+  ) +
+  theme(
+    panel.grid.major.x = element_blank(),
+    legend.title.position = "top",
+    legend.title = element_text(hjust = .5, face = "bold")
+  )
+```
+
+
+```{r}
+#| fig-height: 3
+#| fig-width: 7
+library(estimatr)
+library(sjPlot)
+lm_robust(
+  num_scale ~ tr,
+  data = dt
+) |>
+  plot_model(
+    type = "pred",
+    terms = "tr",
+    ci.lvl = .84
+  ) +
+  labs(
+    title = "Treatment Frames Improved Attitudes",
+    subtitle = "OLS Predictions with HC2 84% CIs",
+    x = NULL,
+    y = "Predicted Attitude Score (-2:2 scale)"
+  ) +
+  coord_flip()
+```
+
+```{r}
+#| fig-height: 3
+#| fig-width: 7
+lm_robust(
+  num_scale ~ tr * pid,
+  data = dt |> filter(pid != "Other")
+) |>
+  plot_model(
+    type = "pred",
+    terms = c("tr", "pid"),
+    ci.lvl = .84
+  ) +
+  labs(
+    title = "Treatment Frames Improved (Dems') Attitudes",
+    subtitle = "OLS Predictions with HC2 84% CIs",
+    x = NULL,
+    y = "Predicted Attitude Score (-2:2 scale)",
+    color = NULL
+  ) +
+  coord_flip() +
+  theme(
+    legend.position = c(.9, .5),
+    legend.direction = "vertical"
+  ) +
+  ggpal(
+    "diverging",
+    ordinal = T,
+    levels = 3
+  )
+```
+
+
+
 
